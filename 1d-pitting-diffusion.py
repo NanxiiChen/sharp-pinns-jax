@@ -21,7 +21,7 @@ class PINN(nn.Module):
                  fourier_emb=True, arch_name="mlp"):
         super().__init__()
 
-        self.loss_item_fns = [self.loss_ac, self.loss_ch,
+        self.loss_fn_panel = [self.loss_ac, self.loss_ch,
                               self.loss_ic, self.loss_bc]
         arch = {"mlp": MLP, "modified_mlp": ModifiedMLP}
         self.model = arch[arch_name](act_name=act_name, num_layers=num_layers,
@@ -168,12 +168,12 @@ class PINN(nn.Module):
 
     @partial(jit, static_argnums=(0,))
     def compute_losses_and_grads(self, params, batch):
-        if len(batch) != len(self.loss_item_fns):
+        if len(batch) != len(self.loss_fn_panel):
             raise ValueError("The number of loss functions "
                              "should be equal to the number of items in the batch")
         losses = []
         grads = []
-        for loss_item_fn, batch_item in zip(self.loss_item_fns, batch):
+        for loss_item_fn, batch_item in zip(self.loss_fn_panel, batch):
 
             loss_item, grad_item = jax.value_and_grad(
                 loss_item_fn)(params, batch_item)
@@ -189,7 +189,7 @@ class PINN(nn.Module):
         weights = self.grad_norm_weights(grads)
         weights = jax.lax.stop_gradient(weights)
 
-        return jnp.sum(weights * losses), losses
+        return jnp.sum(weights * losses), (losses, weights)
 
     @partial(jit, static_argnums=(0,))
     def grad_norm_weights(self, grads: list, eps=1e-8):
@@ -259,7 +259,7 @@ class Sampler:
         x = random.uniform(subkey, (self.n_samples,),
                            minval=self.domain[0][0],
                            maxval=self.domain[0][1])
-        x_local = x / 10
+        x_local = x / 10 + 0.4
         x = jnp.concatenate([x, x_local], axis=0)
         t = jnp.array([self.domain[1][0],])
         return mesh_flat(x, t)
@@ -273,8 +273,8 @@ class Sampler:
         return mesh_flat(x, t)
 
     def sample(self):
-        return self.sample_ac(), self.sample_ch(), self.sample_ic(), self.sample_bc()
-        # return self.sample_pde(), self.sample_pde(), self.sample_ic(), self.sample_bc()
+        # return self.sample_ac(), self.sample_ch(), self.sample_ic(), self.sample_bc()
+        return self.sample_pde(), self.sample_pde(), self.sample_ic(), self.sample_bc()
 
 
 def create_train_state(model, rng, lr, **kwargs):
@@ -293,10 +293,10 @@ def create_train_state(model, rng, lr, **kwargs):
 @jit
 def train_step(state, batch):
     params = state.params
-    (weighted_loss, loss_components), grads = jax.value_and_grad(
+    (weighted_loss, (loss_components, weight_components)), grads = jax.value_and_grad(
         pinn.loss_fn, has_aux=True, argnums=0)(params, batch)
     new_state = state.apply_gradients(grads=grads)
-    return new_state, (weighted_loss, loss_components)
+    return new_state, (weighted_loss, loss_components, weight_components)
 
 
 init_key = random.PRNGKey(0)
@@ -338,7 +338,8 @@ start_time = time.time()
 for epoch in range(EPOCHS):
     if epoch % PAUSE_EVERY == 0:
         batch = sampler.sample()
-    state, (weighted_loss, loss_components) = train_step(state, batch)
+    state, (weighted_loss, loss_components,
+            weight_components) = train_step(state, batch)
     if epoch % PAUSE_EVERY == 0:
         fig, error = evaluate1D(pinn, state.params,
                                 batch_valid, phi_valid,
@@ -353,6 +354,10 @@ for epoch in range(EPOCHS):
             "loss/ch": loss_components[1],
             "loss/ic": loss_components[2],
             "loss/bc": loss_components[3],
+            "weight/ac": weight_components[0],
+            "weight/ch": weight_components[1],
+            "weight/ic": weight_components[2],
+            "weight/bc": weight_components[3],
             "error/error": error
         })
         metrics_tracker.register_figure(epoch, fig)

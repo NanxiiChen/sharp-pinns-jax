@@ -1,9 +1,9 @@
 EPOCHS = 50000
-N_SAMPLES = 100
-LR = 5e-4
+N_SAMPLES = 50
+LR = 1e-3
 DECAY = 0.9
-DECAY_EVERY = 2000
-PAUSE_EVERY = 100
+DECAY_EVERY = 5000
+PAUSE_EVERY = 200
 
 
 DOMAIN = [[-0.5, 0.5], [0, 1]]
@@ -12,14 +12,14 @@ LOG_DIR = "./logs"
 PREFIX = "pitting-diffusion-1d"
 
 
-NUM_LAYERS = 6
-HIDDEN_DIM = 64
+NUM_LAYERS = 4
+HIDDEN_DIM = 32
 OUT_DIM = 2
 
 
-ACT_NAME = "tanh"
-ARCH_NAME = "mlp"
-FOURIER_EMB = False
+ACT_NAME = "Tanh"
+ARCH_NAME = "modified_mlp"
+FOURIER_EMB = True
 
 
 ALPHA_PHI = 1.03e-4
