@@ -41,10 +41,10 @@ class PINN(nn.Module):
         c = jnp.where(r < 0.2**2, 0, 1)
         return jnp.stack([phi, c], axis=1)
 
-    @partial(jit, static_argnums=(0,))
+    # @partial(jit, static_argnums=(0,))
     def ref_sol_ic(self, x, t):
-        r = x[:, 0]**2 + x[:, 1]**2
-        phi = (1 - jnp.tanh(jnp.sqrt(OMEGA_PHI) /
+        r = jnp.sqrt(x[:, 0]**2 + x[:, 1]**2)
+        phi = 1 - (1 - jnp.tanh(jnp.sqrt(OMEGA_PHI) /
                             jnp.sqrt(2 * ALPHA_PHI) * (r-0.05) * Lc)) / 2
         h_phi = -2 * phi**3 + 3 * phi**2
         c = h_phi * CSE + (1 - h_phi) * 0.0
@@ -109,13 +109,13 @@ class PINN(nn.Module):
         dh_dphi = -6 * phi**2 + 6 * phi
         dg_dphi = 4 * phi**3 - 6 * phi**2 + 2 * phi
 
-        jac = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0],
+        jac_phi_t = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0],
                          argnums=1)
-        dphi_dt = jac(x, t)
+        dphi_dt = jac_phi_t(x, t)
 
-        hess = jax.hessian(lambda x, t: self.net_u(params, x, t)[0],
+        hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0],
                            argnums=0)
-        nabla2phi = jnp.linalg.trace(hess(x, t))
+        nabla2phi = jnp.linalg.trace(hess_phi_x(x, t))
         
 
         ac = dphi_dt - AC1 * (c - h_phi*(CSE-CLE) - CLE) * (CSE-CLE) * dh_dphi \
@@ -141,15 +141,19 @@ class PINN(nn.Module):
                              argnums=1)
         dc_dt = jac_c_t(x, t)
 
-        hess = jax.hessian(self.net_u, argnums=(1))
-        hess_phi_x, hess_c_x = hess(params, x, t)
+        # hess = jax.hessian(self.net_u, argnums=(1))
+        # hess_phi_x, hess_c_x = hess(params, x, t)
+        hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0],
+                                    argnums=0)(x, t)
+        hess_c_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[1],
+                                argnums=0)(x, t)
 
         nabla2phi = jnp.linalg.trace(hess_phi_x)
         nabla2c = jnp.linalg.trace(hess_c_x)
 
         nabla2_hphi = 6 * (
             phi * (1 - phi) * nabla2phi
-            + (1 - 2*phi) * jnp.sum(dphi_dx**2, axis=0)
+            + (1 - 2*phi) * jnp.sum(dphi_dx**2)
         )
 
         ch = dc_dt - CH1 * nabla2c + CH1 * (CSE - CLE) * nabla2_hphi
@@ -234,14 +238,14 @@ class Sampler:
 
     def adaptive_sampling(self, residual_fn):
         adaptive_base = lhs_sampling(self.mins, self.maxs,
-                                     self.n_samples**2 * self.adaptive_kw["ratio"])
+                                     self.n_samples**3 * self.adaptive_kw["ratio"])
         residuals = residual_fn(adaptive_base)
         max_residuals, indices = jax.lax.top_k(jnp.abs(residuals),
                                                self.n_samples**2)
         return adaptive_base[indices]
 
     def sample_pde(self):
-        data = lhs_sampling(self.mins, self.maxs, self.n_samples**2)
+        data = lhs_sampling(self.mins, self.maxs, self.n_samples**3)
         return data[:, :-1], data[:, -1:]
 
     def sample_ac(self):
@@ -274,7 +278,7 @@ class Sampler:
         x = lhs_sampling(
             mins=[self.domain[0][0], self.domain[1][0]],
             maxs=[self.domain[0][1], self.domain[1][1]],
-            num=self.n_samples
+            num=self.n_samples**2
         )
         x_local = x / 5
         x = jnp.concatenate([x, x_local], axis=0)
@@ -291,14 +295,14 @@ class Sampler:
         x1t = lhs_sampling(
             mins=[self.domain[0][0], self.domain[2][0]],
             maxs=[self.domain[0][1], self.domain[2][1]],
-            num=self.n_samples
+            num=self.n_samples**2/2
         )
         top = jnp.concatenate([x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1])*self.domain[1][1], 
                                x1t[:, 1:2]], axis=1)
         x2t = lhs_sampling(
             mins=[self.domain[1][0], self.domain[2][0]],
             maxs=[self.domain[1][1], self.domain[2][1]],
-            num=self.n_samples
+            num=self.n_samples**2/2
         )
         left = jnp.concatenate([jnp.ones_like(x2t[:, 0:1])*self.domain[0][0], x2t[:, 0:1], x2t[:, 1:2]], axis=1)
         right = jnp.concatenate([jnp.ones_like(x2t[:, 0:1])*self.domain[0][1], x2t[:, 0:1], x2t[:, 1:2]], axis=1)
@@ -307,7 +311,7 @@ class Sampler:
         x1t = lhs_sampling(
             mins=[self.domain[0][0]/20, self.domain[2][0] + self.domain[2][1] / 10],
             maxs=[self.domain[0][1]/20, self.domain[2][1]],
-            num=self.n_samples
+            num=self.n_samples**2/2
         )
         local = jnp.concatenate([x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1])*self.domain[1][0], 
                                  x1t[:, 1:2]], axis=1)
@@ -315,13 +319,13 @@ class Sampler:
         return data[:, :-1], data[:, -1:]
 
     def sample(self, pde_name="ac"):
-        # if pde_name == "ac":
-        #     return self.sample_ac(), self.sample_ic(), self.sample_bc()
-        # elif pde_name == "ch":
-        #     return self.sample_ch(), self.sample_ic(), self.sample_bc()
-        # else:
-        #     raise ValueError("Invalid PDE name")
-        return self.sample_pde(), self.sample_ic(), self.sample_bc()
+        if pde_name == "ac":
+            return self.sample_ac(), self.sample_ic(), self.sample_bc()
+        elif pde_name == "ch":
+            return self.sample_ch(), self.sample_ic(), self.sample_bc()
+        else:
+            raise ValueError("Invalid PDE name")
+        # return self.sample_pde(), self.sample_ic(), self.sample_bc()
 
 
 def create_train_state(model, rng, lr, **kwargs):
@@ -369,18 +373,19 @@ sampler = Sampler(
     domain=DOMAIN,
     key=sampler_key,
     adaptive_kw={
-        "ratio": 10,
+        "ratio": 5,
         "model": pinn,
         "state": state
     }
 )
 
-mesh = jnp.load()
+mesh = jnp.load(f"{DATA_PATH}/mesh_points.npy")
+mesh /= Lc
 
 start_time = time.time()
 for epoch in range(EPOCHS):
-    # pde_name = "ac" if (epoch % PAUSE_EVERY) < (PAUSE_EVERY // 2) else "ch"
-    pde_name = "ch" if (epoch % PAUSE_EVERY) < (PAUSE_EVERY // 2) else "ac"
+    pde_name = "ac" if (epoch % PAUSE_EVERY) < (PAUSE_EVERY // 2) else "ch"
+    # pde_name = "ch" if (epoch % PAUSE_EVERY) < (PAUSE_EVERY // 2) else "ac"
     pinn.loss_fn_panel = [
         getattr(pinn, f"loss_{pde_name}"),
         pinn.loss_ic,
@@ -393,7 +398,8 @@ for epoch in range(EPOCHS):
             weight_components) = train_step(state, batch)
     if epoch % (PAUSE_EVERY//2) == 0:
         fig, error = evaluate2D(
-            pinn, state.params, 
+            pinn, state.params,
+            mesh, DATA_PATH, ts=TS
         )
 
         print(f"Epoch: {epoch}, "

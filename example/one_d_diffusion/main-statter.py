@@ -107,14 +107,14 @@ class PINN(nn.Module):
         dh_dphi = -6 * phi**2 + 6 * phi
         dg_dphi = 4 * phi**3 - 6 * phi**2 + 2 * phi
 
-        jac = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0],
+        jac_phi_t = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0],
                          argnums=1)
-        dphi_dt = jac(x, t)
+        dphi_dt = jac_phi_t(x, t)
 
-        hess = jax.hessian(lambda x, t: self.net_u(params, x, t)[0],
+        hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0],
                            argnums=0)
-        d2phi_dx2 = hess(x, t)
-        nabla2phi = d2phi_dx2
+        nabla2phi = jnp.linalg.trace(hess_phi_x(x, t))
+        
 
         ac = dphi_dt - AC1 * (c - h_phi*(CSE-CLE) - CLE) * (CSE-CLE) * dh_dphi \
             + AC2 * dg_dphi - AC3 * nabla2phi
@@ -127,24 +127,37 @@ class PINN(nn.Module):
         # self.net_u : (x, t) --> (phi, c)
         phi, c = self.net_u(params, x, t)
 
-        jac = jax.jacrev(self.net_u, argnums=(1, 2))
-        dphi_dx, dc_dx = jac(params, x, t)[0]
-        dphi_dt, dc_dt = jac(params, x, t)[1]
+        # jac = jax.jacrev(self.net_u, argnums=(1, 2))
+        # dphi_dx, dc_dx = jac(params, x, t)[0]
+        # dphi_dt, dc_dt = jac(params, x, t)[1]
+        
+        jac_phi_x = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0],
+                                 argnums=0)
+        dphi_dx = jac_phi_x(x, t)
+        
+        jac_c_t = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1],
+                             argnums=1)
+        dc_dt = jac_c_t(x, t)
 
-        hess = jax.hessian(self.net_u, argnums=(1))
-        d2phi_dx2, d2c_dx2 = hess(params, x, t)
+        # hess = jax.hessian(self.net_u, argnums=(1))
+        # hess_phi_x, hess_c_x = hess(params, x, t)
+        hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0],
+                                    argnums=0)(x, t)
+        hess_c_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[1],
+                                argnums=0)(x, t)
 
-        nabla2phi = d2phi_dx2
-        nabla2c = d2c_dx2
+        nabla2phi = jnp.linalg.trace(hess_phi_x)
+        nabla2c = jnp.linalg.trace(hess_c_x)
 
         nabla2_hphi = 6 * (
             phi * (1 - phi) * nabla2phi
-            + (1 - 2*phi) * dphi_dx**2
+            + (1 - 2*phi) * jnp.sum(dphi_dx**2)
         )
 
         ch = dc_dt - CH1 * nabla2c + CH1 * (CSE - CLE) * nabla2_hphi
 
         return ch.squeeze() / CH_PRE_SCALE
+
 
     @partial(jit, static_argnums=(0,))
     def loss_ac(self, params, batch):

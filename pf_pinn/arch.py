@@ -51,8 +51,8 @@ class MLP(nn.Module):
 
         if self.fourier_emb:
             # separate the spatial and temporal coordinates
-            t_emb = FourierEmbedding()(t)
-            x_emb = FourierEmbedding()(x)
+            t_emb = FourierEmbedding(emb_scale=2.0/5)(t)
+            x_emb = FourierEmbedding(emb_scale=2.0/10)(x)
             x = jnp.concatenate([x_emb, t_emb], axis=-1)
         else:
             x = jnp.concatenate([x, t], axis=-1)

@@ -1,25 +1,25 @@
 EPOCHS = 100000
-N_SAMPLES = 50
+N_SAMPLES = 30
 LR = 1e-3
 DECAY = 0.9
-DECAY_EVERY = 5000
-PAUSE_EVERY = 200
+DECAY_EVERY = 500
+PAUSE_EVERY = 50
 
 
 DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 1]]
 DATA_PATH = "./data/2d-1pit/"
 LOG_DIR = "/root/tf-logs"
 PREFIX = "2d-pit"
+TS = [0.000, 1.534, 5.118, 9.726]
 
-
-NUM_LAYERS = 8
+NUM_LAYERS = 6
 HIDDEN_DIM = 64
 OUT_DIM = 2
 
 
-ACT_NAME = "gelu"
+ACT_NAME = "tanh"
 ARCH_NAME = "modified_mlp"
-FOURIER_EMB = False
+FOURIER_EMB = True
 
 
 ALPHA_PHI = 1.03e-4
@@ -33,6 +33,6 @@ CLE = 5100/1.43e5
 
 
 Lc = 1e-4
-Tc = 1e1
+Tc = 10.0
 AC_PRE_SCALE = 1e6
-CH_PRE_SCALE = 1e0
+CH_PRE_SCALE = 1e3

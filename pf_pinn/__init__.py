@@ -3,7 +3,7 @@ import matplotlib
 import jax
 
 from pf_pinn.arch import MLP, ModifiedMLP
-from pf_pinn.evaluator import evaluate1Dm, evaluate2D
+from pf_pinn.evaluator import evaluate1D, evaluate2D
 from pf_pinn.metrics import MetricsTracker
 from pf_pinn.sample import mesh_flat, lhs_sampling
 
