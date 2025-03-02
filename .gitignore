@@ -1,6 +1,5 @@
 demo/
 output/
-*.npy
 demo.*
 logs/
 
