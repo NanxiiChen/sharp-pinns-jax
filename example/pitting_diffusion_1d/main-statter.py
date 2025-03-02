@@ -1,4 +1,5 @@
 import time
+import datetime
 from functools import partial
 from typing import Callable
 
@@ -11,7 +12,8 @@ from flax.training import train_state
 from jax import jit, random, vmap
 from jax.flatten_util import ravel_pytree
 
-from configs.conf_pitting_diffusion_1d import *
+
+from example.pitting_diffusion_1d.configs import *
 from pf_pinn import *
 
 
@@ -230,13 +232,13 @@ class Sampler:
     def sample_ac(self):
         batch = lhs_sampling(self.mins, self.maxs, self.n_samples**2)
 
-        def loss_fn(batch):
+        def residual_fn(batch):
             model = self.adaptive_kw["model"]
             params = self.adaptive_kw["state"].params
             x, t = batch[:, :-1], batch[:, -1:]
             return vmap(model.net_ac, in_axes=(None, 0, 0))(params, x, t)
 
-        adaptive_sampling = self.adaptive_sampling(loss_fn)
+        adaptive_sampling = self.adaptive_sampling(residual_fn)
         data = jnp.concatenate([batch, adaptive_sampling], axis=0)
         return data[:, :-1], data[:, -1:]
 
@@ -266,18 +268,19 @@ class Sampler:
     def sample_bc(self):
         self.key, subkey = random.split(self.key)
         t = random.uniform(subkey, (self.n_samples,),
-                           minval=self.domain[1][0],
+                           minval=self.domain[1][0] + self.domain[1][1] / 10,
                            maxval=self.domain[1][1])
         x = jnp.array([self.domain[0][0], self.domain[0][1]])
         return mesh_flat(x, t)
 
     def sample(self, pde_name="ac"):
-        if pde_name == "ac":
-            return self.sample_ac(), self.sample_ic(), self.sample_bc()
-        elif pde_name == "ch":
-            return self.sample_ch(), self.sample_ic(), self.sample_bc()
-        else:
-            raise ValueError("Invalid PDE name")
+        # if pde_name == "ac":
+        #     return self.sample_ac(), self.sample_ic(), self.sample_bc()
+        # elif pde_name == "ch":
+        #     return self.sample_ch(), self.sample_ic(), self.sample_bc()
+        # else:
+        #     raise ValueError("Invalid PDE name")
+        return self.sample_pde(), self.sample_ic(), self.sample_bc()
 
 
 def create_train_state(model, rng, lr, **kwargs):
@@ -317,7 +320,9 @@ pinn = PINN(
 state = create_train_state(pinn.model, model_key, LR,
                            decay=DECAY, decay_every=DECAY_EVERY)
 
-metrics_tracker = MetricsTracker(LOG_DIR, PREFIX)
+now = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+log_path = f"{LOG_DIR}/{PREFIX}/{now}"
+metrics_tracker = MetricsTracker(log_path)
 sampler = Sampler(
     N_SAMPLES,
     domain=DOMAIN,
@@ -370,8 +375,15 @@ for epoch in range(EPOCHS):
             "error/error": error
         })
         metrics_tracker.register_figure(epoch, fig)
-        metrics_tracker.writer.flush()
+        metrics_tracker.flush()
         plt.close(fig)
+
+
+# save the model
+params = state.params
+model_path = f"{LOG_DIR}/{PREFIX}_model.npz"
+params = jax.device_get(params)
+jnp.savez(model_path, **params)
 
 end_time = time.time()
 print(f"Training time: {end_time - start_time}")
