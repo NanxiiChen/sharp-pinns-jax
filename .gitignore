@@ -1,3 +1,4 @@
+output/
 *.npy
 demo.*
 logs/
