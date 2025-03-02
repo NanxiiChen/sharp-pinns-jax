@@ -33,3 +33,6 @@ def evaluate1D(pinn, params, batch, ref, **kwargs):
 
     error = jnp.mean((pred - ref) ** 2)
     return fig, error
+
+
+def evaluate2D(pinn, params, )

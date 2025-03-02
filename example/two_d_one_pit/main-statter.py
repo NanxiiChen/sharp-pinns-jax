@@ -115,8 +115,6 @@ class PINN(nn.Module):
 
         hess = jax.hessian(lambda x, t: self.net_u(params, x, t)[0],
                            argnums=0)
-        # calculating d2phi_dx2 + d2phi_dy2
-        # nabla2phi is the trace of the hessian
         nabla2phi = jnp.linalg.trace(hess(x, t))
         
 
@@ -131,19 +129,27 @@ class PINN(nn.Module):
         # self.net_u : (x, t) --> (phi, c)
         phi, c = self.net_u(params, x, t)
 
-        jac = jax.jacrev(self.net_u, argnums=(1, 2))
-        dphi_dx, dc_dx = jac(params, x, t)[0]
-        dphi_dt, dc_dt = jac(params, x, t)[1]
+        # jac = jax.jacrev(self.net_u, argnums=(1, 2))
+        # dphi_dx, dc_dx = jac(params, x, t)[0]
+        # dphi_dt, dc_dt = jac(params, x, t)[1]
+        
+        jac_phi_x = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0],
+                                 argnums=0)
+        dphi_dx = jac_phi_x(x, t)
+        
+        jac_c_t = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1],
+                             argnums=1)
+        dc_dt = jac_c_t(x, t)
 
         hess = jax.hessian(self.net_u, argnums=(1))
-        d2phi_dx2, d2c_dx2 = hess(params, x, t)
+        hess_phi_x, hess_c_x = hess(params, x, t)
 
-        nabla2phi = d2phi_dx2
-        nabla2c = d2c_dx2
+        nabla2phi = jnp.linalg.trace(hess_phi_x)
+        nabla2c = jnp.linalg.trace(hess_c_x)
 
         nabla2_hphi = 6 * (
             phi * (1 - phi) * nabla2phi
-            + (1 - 2*phi) * dphi_dx**2
+            + (1 - 2*phi) * jnp.sum(dphi_dx**2, axis=0)
         )
 
         ch = dc_dt - CH1 * nabla2c + CH1 * (CSE - CLE) * nabla2_hphi
@@ -379,7 +385,8 @@ sampler = Sampler(
 
 start_time = time.time()
 for epoch in range(EPOCHS):
-    pde_name = "ac" if (epoch % PAUSE_EVERY) < (PAUSE_EVERY // 2) else "ch"
+    # pde_name = "ac" if (epoch % PAUSE_EVERY) < (PAUSE_EVERY // 2) else "ch"
+    pde_name = "ch" if (epoch % PAUSE_EVERY) < (PAUSE_EVERY // 2) else "ac"
     pinn.loss_fn_panel = [
         getattr(pinn, f"loss_{pde_name}"),
         pinn.loss_ic,
