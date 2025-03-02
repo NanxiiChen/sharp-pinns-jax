@@ -1,20 +1,25 @@
+import datetime
+import sys
 import time
 from functools import partial
+from pathlib import Path
 from typing import Callable
 
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import optax
-import scipy.io as sio
 from flax import linen as nn
 from flax.training import train_state
 from jax import jit, random, vmap
 from jax.flatten_util import ravel_pytree
 
-import pf_pinn as pfp
-from configs.conf_pitting_active_1d import *
+current_dir = Path(__file__).resolve().parent  # 当前文件所在目录 (example1)
+project_root = current_dir.parent.parent       # 向上两级到 project_working_dir
+sys.path.append(str(project_root))             # 将根目录加入模块搜索路径
+
 from pf_pinn import *
+from example.one_d_diffusion.configs import *
 
 
 class PINN(nn.Module):
@@ -23,8 +28,7 @@ class PINN(nn.Module):
                  fourier_emb=True, arch_name="mlp"):
         super().__init__()
 
-        self.loss_item_fns = [self.loss_ac, self.loss_ch,
-                              self.loss_ic, self.loss_bc]
+        self.loss_fn_panel = []
         arch = {"mlp": MLP, "modified_mlp": ModifiedMLP}
         self.model = arch[arch_name](act_name=act_name, num_layers=num_layers,
                                      hidden_dim=hidden_dim, out_dim=out_dim, fourier_emb=fourier_emb)
@@ -39,7 +43,7 @@ class PINN(nn.Module):
     @partial(jit, static_argnums=(0,))
     def ref_sol_ic(self, x, t):
         phi = (1 - jnp.tanh(jnp.sqrt(OMEGA_PHI) /
-                            jnp.sqrt(2 * ALPHA_PHI) * x * Lc)) / 2
+                            jnp.sqrt(2 * ALPHA_PHI) * (x-0.4) * Lc)) / 2
         h_phi = -2 * phi**3 + 3 * phi**2
         c = h_phi * CSE + (1 - h_phi) * 0.0
         return jnp.stack([phi, c], axis=0)
@@ -170,12 +174,12 @@ class PINN(nn.Module):
 
     @partial(jit, static_argnums=(0,))
     def compute_losses_and_grads(self, params, batch):
-        if len(batch) != len(self.loss_item_fns):
+        if len(batch) != len(self.loss_fn_panel):
             raise ValueError("The number of loss functions "
                              "should be equal to the number of items in the batch")
         losses = []
         grads = []
-        for loss_item_fn, batch_item in zip(self.loss_item_fns, batch):
+        for loss_item_fn, batch_item in zip(self.loss_fn_panel, batch):
 
             loss_item, grad_item = jax.value_and_grad(
                 loss_item_fn)(params, batch_item)
@@ -191,7 +195,7 @@ class PINN(nn.Module):
         weights = self.grad_norm_weights(grads)
         weights = jax.lax.stop_gradient(weights)
 
-        return jnp.sum(weights * losses), losses
+        return jnp.sum(weights * losses), (losses, weights)
 
     @partial(jit, static_argnums=(0,))
     def grad_norm_weights(self, grads: list, eps=1e-8):
@@ -199,49 +203,6 @@ class PINN(nn.Module):
         grad_norms = [jnp.linalg.norm(grad) for grad in grads_flat]
         grad_norms = jnp.array(grad_norms)
         return jnp.sum(grad_norms) / (grad_norms + eps)
-
-
-# class Sampler:
-
-#     def __init__(self, n_samples,
-#                  domain=((-0.5, 0.5), (0, 1)),
-#                  key=random.PRNGKey(0),
-#                  adaptive_base_ratio=10):
-#         self.n_samples = n_samples
-#         self.domain = domain
-#         self.key = key
-#         self.adaptive_ratio = adaptive_base_ratio
-
-#     def sample_pde(self):
-#         self.key, subkey = random.split(self.key)
-#         x = random.uniform(subkey, (self.n_samples,),
-#                            minval=self.domain[0][0],
-#                            maxval=self.domain[0][1])
-#         t = random.uniform(subkey, (self.n_samples,),
-#                            minval=self.domain[1][0],
-#                            maxval=self.domain[1][1])
-#         return mesh_flat(x, t)
-
-#     def sample_ic(self):
-#         self.key, subkey = random.split(self.key)
-#         x = random.uniform(subkey, (self.n_samples,),
-#                            minval=self.domain[0][0],
-#                            maxval=self.domain[0][1])
-#         x_local = x / 10
-#         x = jnp.concatenate([x, x_local], axis=0)
-#         t = jnp.array([self.domain[1][0],])
-#         return mesh_flat(x, t)
-
-#     def sample_bc(self):
-#         self.key, subkey = random.split(self.key)
-#         t = random.uniform(subkey, (self.n_samples,),
-#                            minval=self.domain[1][0],
-#                            maxval=self.domain[1][1])
-#         x = jnp.array([self.domain[0][0], self.domain[0][1]])
-#         return mesh_flat(x, t)
-
-#     def sample(self):
-#         return self.sample_pde(), self.sample_pde(), self.sample_ic(), self.sample_bc()
 
 
 class Sampler:
@@ -276,13 +237,13 @@ class Sampler:
     def sample_ac(self):
         batch = lhs_sampling(self.mins, self.maxs, self.n_samples**2)
 
-        def loss_fn(batch):
+        def residual_fn(batch):
             model = self.adaptive_kw["model"]
             params = self.adaptive_kw["state"].params
             x, t = batch[:, :-1], batch[:, -1:]
             return vmap(model.net_ac, in_axes=(None, 0, 0))(params, x, t)
 
-        adaptive_sampling = self.adaptive_sampling(loss_fn)
+        adaptive_sampling = self.adaptive_sampling(residual_fn)
         data = jnp.concatenate([batch, adaptive_sampling], axis=0)
         return data[:, :-1], data[:, -1:]
 
@@ -304,7 +265,7 @@ class Sampler:
         x = random.uniform(subkey, (self.n_samples,),
                            minval=self.domain[0][0],
                            maxval=self.domain[0][1])
-        x_local = x / 10
+        x_local = x / 10 + 0.4
         x = jnp.concatenate([x, x_local], axis=0)
         t = jnp.array([self.domain[1][0],])
         return mesh_flat(x, t)
@@ -312,14 +273,19 @@ class Sampler:
     def sample_bc(self):
         self.key, subkey = random.split(self.key)
         t = random.uniform(subkey, (self.n_samples,),
-                           minval=self.domain[1][0],
+                           minval=self.domain[1][0] + self.domain[1][1] / 10,
                            maxval=self.domain[1][1])
         x = jnp.array([self.domain[0][0], self.domain[0][1]])
         return mesh_flat(x, t)
 
-    def sample(self):
-        return self.sample_ac(), self.sample_ch(), self.sample_ic(), self.sample_bc()
-        # return self.sample_pde(), self.sample_pde(), self.sample_ic(), self.sample_bc()
+    def sample(self, pde_name="ac"):
+        # if pde_name == "ac":
+        #     return self.sample_ac(), self.sample_ic(), self.sample_bc()
+        # elif pde_name == "ch":
+        #     return self.sample_ch(), self.sample_ic(), self.sample_bc()
+        # else:
+        #     raise ValueError("Invalid PDE name")
+        return self.sample_pde(), self.sample_ic(), self.sample_bc()
 
 
 def create_train_state(model, rng, lr, **kwargs):
@@ -338,15 +304,14 @@ def create_train_state(model, rng, lr, **kwargs):
 @jit
 def train_step(state, batch):
     params = state.params
-    (weighted_loss, loss_components), grads = jax.value_and_grad(
+    (weighted_loss, (loss_components, weight_components)), grads = jax.value_and_grad(
         pinn.loss_fn, has_aux=True, argnums=0)(params, batch)
     new_state = state.apply_gradients(grads=grads)
-    return new_state, (weighted_loss, loss_components)
+    return new_state, (weighted_loss, loss_components, weight_components)
 
 
 init_key = random.PRNGKey(0)
 model_key, sampler_key = random.split(init_key)
-
 pinn = PINN(
     num_layers=NUM_LAYERS,
     hidden_dim=HIDDEN_DIM,
@@ -359,7 +324,10 @@ pinn = PINN(
 
 state = create_train_state(pinn.model, model_key, LR,
                            decay=DECAY, decay_every=DECAY_EVERY)
-metrics_tracker = MetricsTracker(LOG_DIR, PREFIX)
+
+now = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+log_path = f"{LOG_DIR}/{PREFIX}/{now}"
+metrics_tracker = MetricsTracker(log_path)
 sampler = Sampler(
     N_SAMPLES,
     domain=DOMAIN,
@@ -381,28 +349,46 @@ batch_valid = (x_valid, t_valid)
 
 start_time = time.time()
 for epoch in range(EPOCHS):
-    if epoch % PAUSE_EVERY == 0:
-        batch = sampler.sample()
-    state, (weighted_loss, loss_components) = train_step(state, batch)
-    if epoch % PAUSE_EVERY == 0:
+    pde_name = "ac" if (epoch % PAUSE_EVERY) < (PAUSE_EVERY // 2) else "ch"
+    pinn.loss_fn_panel = [
+        getattr(pinn, f"loss_{pde_name}"),
+        pinn.loss_ic,
+        pinn.loss_bc,
+    ]
+
+    if epoch % (PAUSE_EVERY//2) == 0:
+        batch = sampler.sample(pde_name=pde_name)
+    state, (weighted_loss, loss_components,
+            weight_components) = train_step(state, batch)
+    if epoch % (PAUSE_EVERY//2) == 0:
         fig, error = evaluate1D(pinn, state.params,
                                 batch_valid, phi_valid,
                                 xlim=(-0.5, 0.5), ylim=(0, 1),
                                 val_range=(0, 1))
 
-        print(
-            f"Epoch: {epoch}, Error: {error}, Loss: {weighted_loss}")
+        print(f"Epoch: {epoch}, "
+              f"Error: {error:.2e}, "
+              f"Loss_{pde_name}: {loss_components[0]:.2e}, ")
         metrics_tracker.register_scalars(epoch, {
             "loss/weighted": jnp.sum(weighted_loss),
-            "loss/ac": loss_components[0],
-            "loss/ch": loss_components[1],
-            "loss/ic": loss_components[2],
-            "loss/bc": loss_components[3],
+            f"loss/{pde_name}": loss_components[0],
+            "loss/ic": loss_components[1],
+            "loss/bc": loss_components[2],
+            f"weight/{pde_name}": weight_components[0],
+            "weight/ic": weight_components[1],
+            "weight/bc": weight_components[2],
             "error/error": error
         })
         metrics_tracker.register_figure(epoch, fig)
-        metrics_tracker.writer.flush()
+        metrics_tracker.flush()
         plt.close(fig)
+
+
+# save the model
+params = state.params
+model_path = f"{LOG_DIR}/{PREFIX}_model.npz"
+params = jax.device_get(params)
+jnp.savez(model_path, **params)
 
 end_time = time.time()
 print(f"Training time: {end_time - start_time}")
