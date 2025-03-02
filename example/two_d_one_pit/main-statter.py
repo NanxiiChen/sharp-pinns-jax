@@ -375,13 +375,7 @@ sampler = Sampler(
     }
 )
 
-# data = jnp.load(DATA_PATH)
-# x_valid = data["x"].reshape(-1,) / Lc
-# t_valid = data["t"].reshape(-1,) / Tc
-# phi_valid = data["phi"]
-# x_valid, t_valid = jnp.meshgrid(x_valid, t_valid)
-# batch_valid = (x_valid, t_valid)
-
+mesh = jnp.load()
 
 start_time = time.time()
 for epoch in range(EPOCHS):
@@ -398,13 +392,12 @@ for epoch in range(EPOCHS):
     state, (weighted_loss, loss_components,
             weight_components) = train_step(state, batch)
     if epoch % (PAUSE_EVERY//2) == 0:
-        # fig, error = evaluate1D(pinn, state.params,
-        #                         batch_valid, phi_valid,
-        #                         xlim=(-0.5, 0.5), ylim=(0, 1),
-        #                         val_range=(0, 1))
+        fig, error = evaluate2D(
+            pinn, state.params, 
+        )
 
         print(f"Epoch: {epoch}, "
-            #   f"Error: {error:.2e}, "
+              f"Error: {error:.2e}, "
               f"Loss_{pde_name}: {loss_components[0]:.2e}, ")
         metrics_tracker.register_scalars(epoch, {
             "loss/weighted": jnp.sum(weighted_loss),
@@ -414,11 +407,11 @@ for epoch in range(EPOCHS):
             f"weight/{pde_name}": weight_components[0],
             "weight/ic": weight_components[1],
             "weight/bc": weight_components[2],
-            # "error/error": error
+            "error/error": error
         })
-        # metrics_tracker.register_figure(epoch, fig)
+        metrics_tracker.register_figure(epoch, fig)
         metrics_tracker.flush()
-        # plt.close(fig)
+        plt.close(fig)
 
 
 # save the model

@@ -35,4 +35,32 @@ def evaluate1D(pinn, params, batch, ref, **kwargs):
     return fig, error
 
 
-def evaluate2D(pinn, params, )
+def evaluate2D(pinn, params, mesh, ref_path, ts, **kwargs):
+    fig, axes = plt.subplots(2, len(ts), figsize=(10, 5*len(ts)))
+    vmin, vmax = kwargs.get("val_range", (-1, 1))
+    xlim = kwargs.get("xlim", (-0.5, 0.5))
+    ylim = kwargs.get("ylim",(0, 0.5))
+    error = 0
+    for idx, tic in enumerate(ts):
+        t = jnp.ones_like(mesh[:, 0:1]) * tic
+        batch = (mesh, t)
+        pred = vmap(lambda x, t: pinn.net_u(params, x, t)[0], in_axes=(0, 0))(
+            mesh, t
+        ).reshape(mesh.shape[0], 1)
+        
+        ax = axes[0, idx]
+        ax.scatter(mesh[:, 0], mesh[:, 1], c=pred[:, 0], cmap="coolwarm",)
+        ax.set(xlabel="x", ylabel="y", title=f"t={tic}",
+               xlim=xlim, ylim=ylim)
+        
+        ref_sol = jnp.load(f"{ref_path}/sol-{tic}.npy")
+        ax = axes[1, idx]
+        ax.scatter(mesh[:, 0], mesh[:, 1], c=jnp.abs(pred - ref_sol), cmap="coolwarm",)
+        ax.set(xlabel="x", ylabel="y", title=f"t={tic}",
+               xlim=xlim, ylim=ylim)
+        error += jnp.mean((pred - ref_sol) ** 2)
+        
+    plt.tight_layout()
+    error /= len(ts)
+    return fig, error / len(ts)
+    
