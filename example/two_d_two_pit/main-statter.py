@@ -19,10 +19,7 @@ project_root = current_dir.parent.parent       # 向上两级到 project_working
 sys.path.append(str(project_root))             # 将根目录加入模块搜索路径
 
 from pf_pinn import *
-from example.two_d_one_pit.configs import *
-
-# from jax import config
-# config.update("jax_disable_jit", True)
+from example.two_d_two_pit.configs import *
 
 
 class PINN(nn.Module):
@@ -39,7 +36,7 @@ class PINN(nn.Module):
     @partial(jit, static_argnums=(0,))
     def ref_sol_bc(self, x, t):
         # x: (x1, x2)
-        r = x[:, 0]**2 + x[:, 1]**2
+        r = jnp.sqrt(jnp.abs(x[:, 0] - 0.15)**2 + x[:, 1]**2)
         phi = jnp.where(r < 0.05**2, 0, 1)
         c = jnp.where(r < 0.05**2, 0, 1)
         sol = jnp.stack([phi, c], axis=1)
@@ -47,13 +44,15 @@ class PINN(nn.Module):
 
     @partial(jit, static_argnums=(0,))
     def ref_sol_ic(self, x, t):
-        r = jnp.sqrt(x[:, 0]**2 + x[:, 1]**2)
+        # r = jnp.sqrt(x[:, 0]**2 + x[:, 1]**2)
+        r = jnp.sqrt(jnp.abs(x[:, 0] - 0.15)**2 + x[:, 1]**2)
         phi = 1 - (1 - jnp.tanh(jnp.sqrt(OMEGA_PHI) /
                             jnp.sqrt(2 * ALPHA_PHI) * (r-0.05) * Lc)) / 2
         h_phi = -2 * phi**3 + 3 * phi**2
         c = h_phi * CSE + (1 - h_phi) * 0.0
         sol = jnp.stack([phi, c], axis=1)
         return jax.lax.stop_gradient(sol)
+
 
     def grad(self, func: Callable, argnums: int):
         return jax.grad(lambda *args, **kwargs: func(*args, **kwargs).sum(), argnums=argnums)
@@ -62,7 +61,8 @@ class PINN(nn.Module):
     def net_u(self, params, x, t):
         
         def hard_cons(params, x, t):
-            phi, cl = nn.tanh(self.model.apply(params, x, t)) / 2 + 0.5
+            sol = nn.tanh(self.model.apply(params, x, t)) / 2 + 0.5
+            phi, cl = nn.tanh(sol) / 2 + 0.5
             cl = cl * (1 - CSE + CLE)
             c = (CSE - CLE) * (-2*phi**3 + 3*phi**2) + cl
             return jnp.stack([phi, c], axis=0)
@@ -326,7 +326,11 @@ class Sampler:
             maxs=[self.domain[0][1], self.domain[1][1]],
             num=self.n_samples**2
         )
-        x_local = x / 5
+        x_local = lhs_sampling(
+            mins=[-0.3, 0],
+            maxs=[0.3, 0.15],
+            num=self.n_samples**2
+        )
         x = jnp.concatenate([x, x_local], axis=0)
         t = jnp.zeros_like(x[:, 0:1])
         return x, t
@@ -361,7 +365,11 @@ class Sampler:
         )
         local = jnp.concatenate([x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1])*self.domain[1][0], 
                                  x1t[:, 1:2]], axis=1)
-        data = jnp.concatenate([top, left, right, local], axis=0)
+        local_left = local.copy()
+        local_right = local.copy()
+        local_left = local_left.at[:, 0:1].set(local_left[:, 0:1] - 0.15)
+        local_right = local_right.at[:, 0:1].set(local_right[:, 0:1] + 0.15)
+        data = jnp.concatenate([top, left, right, local_left, local_right], axis=0)
         return data[:, :-1], data[:, -1:]
     
     def sample_flux(self):

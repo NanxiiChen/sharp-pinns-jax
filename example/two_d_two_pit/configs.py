@@ -7,10 +7,10 @@ PAUSE_EVERY = 100
 
 
 DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 1]]
-DATA_PATH = "./data/2d-1pit/"
+DATA_PATH = "./data/2d-2pits/"
 LOG_DIR = "/root/tf-logs"
-PREFIX = "2d-1pit"
-TS = [0.000, 1.534, 5.118, 9.726]
+PREFIX = "2d-2pits"
+TS = [0.000, 1.418, 5.393, 9.528]
 
 NUM_LAYERS = 6
 HIDDEN_DIM = 128
