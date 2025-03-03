@@ -46,7 +46,7 @@ class PINN(nn.Module):
     def ref_sol_ic(self, x, t):
         r = jnp.sqrt(x[:, 0]**2 + x[:, 1]**2)
         phi = 1 - (1 - jnp.tanh(jnp.sqrt(OMEGA_PHI) /
-                            jnp.sqrt(2 * ALPHA_PHI) * (r-0.05) * Lc*3)) / 2
+                            jnp.sqrt(2 * ALPHA_PHI) * (r-0.05) * Lc)) / 2
         h_phi = -2 * phi**3 + 3 * phi**2
         c = h_phi * CSE + (1 - h_phi) * 0.0
         sol = jnp.stack([phi, c], axis=1)
@@ -57,8 +57,16 @@ class PINN(nn.Module):
 
     @partial(jit, static_argnums=(0,))
     def net_u(self, params, x, t):
+        # no hard constraints
         # return nn.tanh(self.model.apply(params, x, t)) / 2 + 0.5
-        sol = self.model.apply(params, x, t)
+        
+        # use assymetric
+        sol_pos_x = self.model.apply(params, x, t)
+        neg_x = x * jnp.array([-1, 1])
+        sol_neg_x = self.model.apply(params, neg_x, t)
+        sol = (sol_pos_x + sol_neg_x) / 2
+        
+        # sol = self.model.apply(params, x, t)
         phi, cl = nn.tanh(sol) / 2 + 0.5
         cl = cl * (1 - CSE + CLE)
         c = (CSE - CLE) * (-2*phi**3 + 3*phi**2) + cl
@@ -161,6 +169,22 @@ class PINN(nn.Module):
         ch = dc_dt - CH1 * nabla2c + CH1 * (CSE - CLE) * nabla2_hphi
 
         return ch.squeeze() / CH_PRE_SCALE
+    
+    @partial(jit, static_argnums=(0,))
+    def net_speed(self, params, x, t):
+        jac_dt = jax.jacrev(self.net_u, argnums=2)
+        dphi_dt, dc_dt = jac_dt(params, x, t)
+        return dphi_dt, dc_dt
+    
+    @partial(jit, static_argnums=(0,))
+    def net_nabla(self, params, x, t, on="y"):
+        idx = 1 if on == "y" else 0
+        nabla_phi_part = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0],
+                            argnums=0)(x, t)[idx]
+        nabla_c_part = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1],
+                            argnums=0)(x, t)[idx]
+        return nabla_phi_part, nabla_c_part
+
 
     @partial(jit, static_argnums=(0,))
     def loss_ac(self, params, batch):
@@ -187,7 +211,20 @@ class PINN(nn.Module):
         x, t = batch
         u = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
         return jnp.mean((u - self.ref_sol_bc(x, t)) ** 2)
-
+    
+    @partial(jit, static_argnums=(0,))
+    def loss_irr(self, params, batch):
+        x, t = batch
+        dphi_dt, dc_dt = vmap(self.net_speed, in_axes=(None, 0, 0))(params, x, t)
+        # dphi_dt must be negative, use relu to ensure it
+        return jnp.mean(jax.nn.relu(dphi_dt)) + jnp.mean(jax.nn.relu(dc_dt))
+    
+    @partial(jit, static_argnums=(0,))
+    def loss_flux(self, params, batch):
+        x, t = batch
+        dphi_dy, dc_dy = vmap(self.net_nabla, in_axes=(None, 0, 0))(params, x, t)
+        return jnp.mean(dphi_dy ** 2) + jnp.mean(dc_dy ** 2)
+        
     @partial(jit, static_argnums=(0,))
     def compute_losses_and_grads(self, params, batch):
         if len(batch) != len(self.loss_fn_panel):
@@ -220,7 +257,10 @@ class PINN(nn.Module):
         grad_norms = jnp.array(grad_norms)
         # grad clipping within [1e-8, 1e8]
         grad_norms = jnp.clip(grad_norms, eps, 1/eps)
-        return jnp.mean(grad_norms) / (grad_norms + eps)
+        weights = jnp.mean(grad_norms) / (grad_norms + eps)
+        weights = jnp.nan_to_num(weights)
+        weights = jnp.clip(weights, eps, 1/eps)
+        return weights
 
 
 class Sampler:
@@ -323,15 +363,26 @@ class Sampler:
                                  x1t[:, 1:2]], axis=1)
         data = jnp.concatenate([top, left, right, local], axis=0)
         return data[:, :-1], data[:, -1:]
+    
+    def sample_flux(self):
+        x1t = lhs_sampling(
+            mins=[self.domain[0][0], self.domain[2][0]],
+            maxs=[self.domain[0][1], self.domain[2][1]],
+            num=self.n_samples**2/2
+        )
+        top = jnp.concatenate([x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1])*self.domain[1][0], 
+                               x1t[:, 1:2]], axis=1)
+        return top[:, :-1], top[:, -1:]
 
     def sample(self, pde_name="ac"):
-        if pde_name == "ac":
-            return self.sample_ac(), self.sample_ic(), self.sample_bc()
-        elif pde_name == "ch":
-            return self.sample_ch(), self.sample_ic(), self.sample_bc()
-        else:
-            raise ValueError("Invalid PDE name")
-        # return self.sample_pde(), self.sample_ic(), self.sample_bc()
+        data_pde = self.sample_pde()
+        # if pde_name == "ac":
+        #     return self.sample_ac(), self.sample_ic(), self.sample_bc()
+        # elif pde_name == "ch":
+        #     return self.sample_ch(), self.sample_ic(), self.sample_bc()
+        # else:
+        #     raise ValueError("Invalid PDE name")
+        return data_pde, self.sample_ic(), self.sample_bc(), data_pde, self.sample_flux()
 
 
 def create_train_state(model, rng, lr, **kwargs):
@@ -394,6 +445,8 @@ for epoch in range(EPOCHS):
         getattr(pinn, f"loss_{pde_name}"),
         pinn.loss_ic,
         pinn.loss_bc,
+        pinn.loss_irr,
+        pinn.loss_flux
     ]
 
     if epoch % (PAUSE_EVERY//2) == 0:
@@ -417,9 +470,13 @@ for epoch in range(EPOCHS):
             f"loss/{pde_name}": loss_components[0],
             "loss/ic": loss_components[1],
             "loss/bc": loss_components[2],
+            "loss/irr": loss_components[3],
+            "loss/flux": loss_components[4],
             f"weight/{pde_name}": weight_components[0],
             "weight/ic": weight_components[1],
             "weight/bc": weight_components[2],
+            "weight/irr": weight_components[3],
+            "weight/flux": weight_components[4],
             "error/error": error
         })
         metrics_tracker.register_figure(epoch, fig)
