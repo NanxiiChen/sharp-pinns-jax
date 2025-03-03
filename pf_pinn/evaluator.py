@@ -40,9 +40,12 @@ def evaluate2D(pinn, params, mesh, ref_path, ts, **kwargs):
     vmin, vmax = kwargs.get("val_range", (-1, 1))
     xlim = kwargs.get("xlim", (-0.5, 0.5))
     ylim = kwargs.get("ylim",(0, 0.5))
+    Lc = kwargs.get("Lc", 1e-4)
+    Tc = kwargs.get("Tc", 10.0)
     error = 0
+    mesh /= Lc
     for idx, tic in enumerate(ts):
-        t = jnp.ones_like(mesh[:, 0:1]) * tic
+        t = jnp.ones_like(mesh[:, 0:1]) * tic / Tc
         batch = (mesh, t)
         pred = vmap(lambda x, t: pinn.net_u(params, x, t)[0], in_axes=(0, 0))(
             mesh, t

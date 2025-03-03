@@ -37,18 +37,20 @@ class PINN(nn.Module):
     def ref_sol_bc(self, x, t):
         # x: (x1, x2)
         r = x[:, 0]**2 + x[:, 1]**2
-        phi = jnp.where(r < 0.2**2, 0, 1)
-        c = jnp.where(r < 0.2**2, 0, 1)
-        return jnp.stack([phi, c], axis=1)
+        phi = jnp.where(r < 0.05**2, 0, 1)
+        c = jnp.where(r < 0.05**2, 0, 1)
+        sol = jnp.stack([phi, c], axis=1)
+        return jax.lax.stop_gradient(sol)
 
     # @partial(jit, static_argnums=(0,))
     def ref_sol_ic(self, x, t):
         r = jnp.sqrt(x[:, 0]**2 + x[:, 1]**2)
         phi = 1 - (1 - jnp.tanh(jnp.sqrt(OMEGA_PHI) /
-                            jnp.sqrt(2 * ALPHA_PHI) * (r-0.05) * Lc)) / 2
+                            jnp.sqrt(2 * ALPHA_PHI) * (r-0.05) * Lc*3)) / 2
         h_phi = -2 * phi**3 + 3 * phi**2
         c = h_phi * CSE + (1 - h_phi) * 0.0
-        return jnp.stack([phi, c], axis=1)
+        sol = jnp.stack([phi, c], axis=1)
+        return jax.lax.stop_gradient(sol)
 
     def grad(self, func: Callable, argnums: int):
         return jax.grad(lambda *args, **kwargs: func(*args, **kwargs).sum(), argnums=argnums)
@@ -212,11 +214,13 @@ class PINN(nn.Module):
         return jnp.sum(weights * losses), (losses, weights)
 
     @partial(jit, static_argnums=(0,))
-    def grad_norm_weights(self, grads: list, eps=1e-8):
+    def grad_norm_weights(self, grads: list, eps=1e-6):
         grads_flat = [ravel_pytree(grad)[0] for grad in grads]
         grad_norms = [jnp.linalg.norm(grad) for grad in grads_flat]
         grad_norms = jnp.array(grad_norms)
-        return jnp.sum(grad_norms) / (grad_norms + eps)
+        # grad clipping within [1e-8, 1e8]
+        grad_norms = jnp.clip(grad_norms, eps, 1/eps)
+        return jnp.mean(grad_norms) / (grad_norms + eps)
 
 
 class Sampler:
@@ -241,7 +245,7 @@ class Sampler:
                                      self.n_samples**3 * self.adaptive_kw["ratio"])
         residuals = residual_fn(adaptive_base)
         max_residuals, indices = jax.lax.top_k(jnp.abs(residuals),
-                                               self.n_samples**2)
+                                               self.n_samples**3 // 5)
         return adaptive_base[indices]
 
     def sample_pde(self):
@@ -249,11 +253,12 @@ class Sampler:
         return data[:, :-1], data[:, -1:]
 
     def sample_ac(self):
-        batch = lhs_sampling(self.mins, self.maxs, self.n_samples**2)
+        batch = lhs_sampling(self.mins, self.maxs, self.n_samples**3)
 
+        @jit
         def residual_fn(batch):
             model = self.adaptive_kw["model"]
-            params = self.adaptive_kw["state"].params
+            params = self.adaptive_kw["params"]
             x, t = batch[:, :-1], batch[:, -1:]
             return vmap(model.net_ac, in_axes=(None, 0, 0))(params, x, t)
 
@@ -264,9 +269,10 @@ class Sampler:
     def sample_ch(self):
         batch = lhs_sampling(self.mins, self.maxs, self.n_samples**2)
 
+        @jit
         def residual_fn(batch):
             model = self.adaptive_kw["model"]
-            params = self.adaptive_kw["state"].params
+            params = self.adaptive_kw["params"]
             x, t = batch[:, :-1], batch[:, -1:]
             return vmap(model.net_ch, in_axes=(None, 0, 0))(params, x, t)
 
@@ -309,7 +315,7 @@ class Sampler:
         
         # local: x1 \in (self.domain[0][0]/20, self.domain[0][1]/20), x2 = self.domain[1][0], t \in (self.domain[2][0] + self.domain[2][1] / 10, self.domain[2][1])
         x1t = lhs_sampling(
-            mins=[self.domain[0][0]/20, self.domain[2][0] + self.domain[2][1] / 10],
+            mins=[self.domain[0][0]/20, self.domain[2][0] + self.domain[2][1] / 5],
             maxs=[self.domain[0][1]/20, self.domain[2][1]],
             num=self.n_samples**2/2
         )
@@ -375,12 +381,10 @@ sampler = Sampler(
     adaptive_kw={
         "ratio": 5,
         "model": pinn,
-        "state": state
+        "params": state.params
     }
 )
 
-mesh = jnp.load(f"{DATA_PATH}/mesh_points.npy")
-mesh /= Lc
 
 start_time = time.time()
 for epoch in range(EPOCHS):
@@ -393,13 +397,16 @@ for epoch in range(EPOCHS):
     ]
 
     if epoch % (PAUSE_EVERY//2) == 0:
+        sampler.adaptive_kw["params"].update(state.params)
         batch = sampler.sample(pde_name=pde_name)
     state, (weighted_loss, loss_components,
             weight_components) = train_step(state, batch)
     if epoch % (PAUSE_EVERY//2) == 0:
         fig, error = evaluate2D(
             pinn, state.params,
-            mesh, DATA_PATH, ts=TS
+            jnp.load(f"{DATA_PATH}/mesh_points.npy"),
+            DATA_PATH, ts=TS,
+            Lc=Lc, Tc=Tc,
         )
 
         print(f"Epoch: {epoch}, "

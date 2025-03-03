@@ -38,7 +38,8 @@ class PINN(nn.Module):
         # u(x<0, t) = [1, 1], u(x>0, t) = [0, 0]
         phi = jnp.where(x < 0, 1, 0)
         c = jnp.where(x < 0, 1, 0)
-        return jnp.stack([phi, c], axis=0)
+        sol = jnp.stack([phi, c], axis=0)
+        return jax.lax.stop_gradient(sol)
 
     @partial(jit, static_argnums=(0,))
     def ref_sol_ic(self, x, t):
@@ -46,7 +47,8 @@ class PINN(nn.Module):
                             jnp.sqrt(2 * ALPHA_PHI) * (x-0.4) * Lc)) / 2
         h_phi = -2 * phi**3 + 3 * phi**2
         c = h_phi * CSE + (1 - h_phi) * 0.0
-        return jnp.stack([phi, c], axis=0)
+        sol = jnp.stack([phi, c], axis=0)
+        return jax.lax.stop_gradient(sol)
 
     def grad(self, func: Callable, argnums: int):
         return jax.grad(lambda *args, **kwargs: func(*args, **kwargs).sum(), argnums=argnums)
@@ -245,6 +247,8 @@ class Sampler:
 
     def sample_pde(self):
         data = lhs_sampling(self.mins, self.maxs, self.n_samples**2)
+        # self.key, subkey = random.split(self.key)
+        # data = shfted_grid(self.mins, self.maxs, [self.n_samples, self.n_samples], subkey)
         return data[:, :-1], data[:, -1:]
 
     def sample_ac(self):
@@ -252,7 +256,7 @@ class Sampler:
 
         def residual_fn(batch):
             model = self.adaptive_kw["model"]
-            params = self.adaptive_kw["state"].params
+            params = self.adaptive_kw["params"]
             x, t = batch[:, :-1], batch[:, -1:]
             return vmap(model.net_ac, in_axes=(None, 0, 0))(params, x, t)
 
@@ -265,7 +269,7 @@ class Sampler:
 
         def residual_fn(batch):
             model = self.adaptive_kw["model"]
-            params = self.adaptive_kw["state"].params
+            params = self.adaptive_kw["params"]
             x, t = batch[:, :-1], batch[:, -1:]
             return vmap(model.net_ch, in_axes=(None, 0, 0))(params, x, t)
 
@@ -292,13 +296,13 @@ class Sampler:
         return mesh_flat(x, t)
 
     def sample(self, pde_name="ac"):
-        # if pde_name == "ac":
-        #     return self.sample_ac(), self.sample_ic(), self.sample_bc()
-        # elif pde_name == "ch":
-        #     return self.sample_ch(), self.sample_ic(), self.sample_bc()
-        # else:
-        #     raise ValueError("Invalid PDE name")
-        return self.sample_pde(), self.sample_ic(), self.sample_bc()
+        if pde_name == "ac":
+            return self.sample_ac(), self.sample_ic(), self.sample_bc()
+        elif pde_name == "ch":
+            return self.sample_ch(), self.sample_ic(), self.sample_bc()
+        else:
+            raise ValueError("Invalid PDE name")
+        # return self.sample_pde(), self.sample_ic(), self.sample_bc()
 
 
 def create_train_state(model, rng, lr, **kwargs):
@@ -348,7 +352,7 @@ sampler = Sampler(
     adaptive_kw={
         "ratio": 10,
         "model": pinn,
-        "state": state
+        "params": state.params,
     }
 )
 
@@ -370,6 +374,7 @@ for epoch in range(EPOCHS):
     ]
 
     if epoch % (PAUSE_EVERY//2) == 0:
+        sampler.adaptive_kw["params"].update(state.params)
         batch = sampler.sample(pde_name=pde_name)
     state, (weighted_loss, loss_components,
             weight_components) = train_step(state, batch)
