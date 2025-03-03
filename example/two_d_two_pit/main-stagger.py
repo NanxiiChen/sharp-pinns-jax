@@ -1,3 +1,6 @@
+# TODO: Causal weighting
+
+
 import datetime
 import sys
 import time
@@ -21,6 +24,8 @@ sys.path.append(str(project_root))             # 将根目录加入模块搜索�
 from pf_pinn import *
 from example.two_d_two_pit.configs import *
 
+# from jax import config
+# config.update("jax_disable_jit", True)
 
 class PINN(nn.Module):
 
@@ -36,16 +41,17 @@ class PINN(nn.Module):
     @partial(jit, static_argnums=(0,))
     def ref_sol_bc(self, x, t):
         # x: (x1, x2)
-        r = jnp.sqrt(jnp.abs(x[:, 0] - 0.15)**2 + x[:, 1]**2)
-        phi = jnp.where(r < 0.05**2, 0, 1)
-        c = jnp.where(r < 0.05**2, 0, 1)
+        r = jnp.sqrt((jnp.abs(x[:, 0]) - 0.15) ** 2 + x[:, 1] ** 2)
+        # phi = jnp.where(r < 0.05**2, 0, 1)
+        # c = jnp.where(r < 0.05**2, 0, 1)
+        phi = (r > 0.05).astype(jnp.float32)
+        c = phi.copy()
         sol = jnp.stack([phi, c], axis=1)
         return jax.lax.stop_gradient(sol)
 
     @partial(jit, static_argnums=(0,))
     def ref_sol_ic(self, x, t):
-        # r = jnp.sqrt(x[:, 0]**2 + x[:, 1]**2)
-        r = jnp.sqrt(jnp.abs(x[:, 0] - 0.15)**2 + x[:, 1]**2)
+        r = jnp.sqrt((jnp.abs(x[:, 0]) - 0.15) ** 2 + x[:, 1] ** 2)
         phi = 1 - (1 - jnp.tanh(jnp.sqrt(OMEGA_PHI) /
                             jnp.sqrt(2 * ALPHA_PHI) * (r-0.05) * Lc)) / 2
         h_phi = -2 * phi**3 + 3 * phi**2
@@ -61,8 +67,7 @@ class PINN(nn.Module):
     def net_u(self, params, x, t):
         
         def hard_cons(params, x, t):
-            sol = nn.tanh(self.model.apply(params, x, t)) / 2 + 0.5
-            phi, cl = nn.tanh(sol) / 2 + 0.5
+            phi, cl = nn.tanh(self.model.apply(params, x, t)) / 2 + 0.5
             cl = cl * (1 - CSE + CLE)
             c = (CSE - CLE) * (-2*phi**3 + 3*phi**2) + cl
             return jnp.stack([phi, c], axis=0)
@@ -71,6 +76,7 @@ class PINN(nn.Module):
             hard_cons(params, x, t) \
             + hard_cons(params, x * jnp.array([-1, 1]), t)
         ) / 2
+        # return hard_cons(params, x, t)
 
     @partial(jit, static_argnums=(0,))
     def net_pde(self, params, x, t):
@@ -290,12 +296,12 @@ class Sampler:
 
     def sample_pde(self):
         data = lhs_sampling(self.mins, self.maxs, self.n_samples**3)
+        # data = shfted_grid(self.mins, self.maxs, [self.n_samples, self.n_samples, self.n_samples*2], self.key)
         return data[:, :-1], data[:, -1:]
 
     def sample_ac(self):
         batch = lhs_sampling(self.mins, self.maxs, self.n_samples**3)
 
-        @jit
         def residual_fn(batch):
             model = self.adaptive_kw["model"]
             params = self.adaptive_kw["params"]
@@ -309,7 +315,6 @@ class Sampler:
     def sample_ch(self):
         batch = lhs_sampling(self.mins, self.maxs, self.n_samples**2)
 
-        @jit
         def residual_fn(batch):
             model = self.adaptive_kw["model"]
             params = self.adaptive_kw["params"]
@@ -324,12 +329,12 @@ class Sampler:
         x = lhs_sampling(
             mins=[self.domain[0][0], self.domain[1][0]],
             maxs=[self.domain[0][1], self.domain[1][1]],
-            num=self.n_samples**2
+            num=self.n_samples**2 * 2
         )
         x_local = lhs_sampling(
             mins=[-0.3, 0],
             maxs=[0.3, 0.15],
-            num=self.n_samples**2
+            num=self.n_samples**2 * 2
         )
         x = jnp.concatenate([x, x_local], axis=0)
         t = jnp.zeros_like(x[:, 0:1])
@@ -345,23 +350,23 @@ class Sampler:
         x1t = lhs_sampling(
             mins=[self.domain[0][0], self.domain[2][0]],
             maxs=[self.domain[0][1], self.domain[2][1]],
-            num=self.n_samples**2/2
+            num=self.n_samples**2/5
         )
         top = jnp.concatenate([x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1])*self.domain[1][1], 
                                x1t[:, 1:2]], axis=1)
         x2t = lhs_sampling(
             mins=[self.domain[1][0], self.domain[2][0]],
             maxs=[self.domain[1][1], self.domain[2][1]],
-            num=self.n_samples**2/2
+            num=self.n_samples**2/5
         )
         left = jnp.concatenate([jnp.ones_like(x2t[:, 0:1])*self.domain[0][0], x2t[:, 0:1], x2t[:, 1:2]], axis=1)
         right = jnp.concatenate([jnp.ones_like(x2t[:, 0:1])*self.domain[0][1], x2t[:, 0:1], x2t[:, 1:2]], axis=1)
         
         # local: x1 \in (self.domain[0][0]/20, self.domain[0][1]/20), x2 = self.domain[1][0], t \in (self.domain[2][0] + self.domain[2][1] / 10, self.domain[2][1])
         x1t = lhs_sampling(
-            mins=[self.domain[0][0]/20, self.domain[2][0] + self.domain[2][1] / 5],
+            mins=[self.domain[0][0]/20, self.domain[2][0] + self.domain[2][1] / 10],
             maxs=[self.domain[0][1]/20, self.domain[2][1]],
-            num=self.n_samples**2/2
+            num=self.n_samples**2/5
         )
         local = jnp.concatenate([x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1])*self.domain[1][0], 
                                  x1t[:, 1:2]], axis=1)
@@ -389,6 +394,7 @@ class Sampler:
             data_pde = self.sample_ch()
         else:
             raise ValueError("Invalid PDE name")
+        # data_pde = self.sample_pde()
         return data_pde, self.sample_ic(), self.sample_bc(), data_pde, self.sample_flux()
 
 
@@ -437,7 +443,7 @@ sampler = Sampler(
     domain=DOMAIN,
     key=sampler_key,
     adaptive_kw={
-        "ratio": 5,
+        "ratio": 2,
         "model": pinn,
         "params": state.params
     }

@@ -34,6 +34,21 @@ class FourierEmbedding(nn.Module):
                             (x.shape[-1], self.emb_dim))
         return jnp.concatenate([jnp.sin(jnp.pi*jnp.dot(x, kernel)),
                                 jnp.cos(jnp.pi*jnp.dot(x, kernel))], axis=-1)
+        
+# class ExponentialEmbedding(nn.Module):
+#     emb_scale: tuple = (1/2, 3/2)
+#     emb_dim: int = 32
+    
+#     @nn.compact
+#     def __call__(self, x):
+#         low, high = self.emb_scale
+#         # the initial kernel is a linspace from low to high
+#         kernel = jnp.linspace(low, high, self.emb_dim)
+
+
+#         return jnp.dot(x, jnp.ones((x.shape[-1], self.emb_dim))) ** kernel
+        
+    
 
 
 class MLP(nn.Module):
@@ -52,7 +67,7 @@ class MLP(nn.Module):
         if self.fourier_emb:
             # separate the spatial and temporal coordinates
             t_emb = FourierEmbedding(emb_scale=1.0)(t)
-            x_emb = FourierEmbedding(emb_scale=5.0)(x)
+            x_emb = FourierEmbedding(emb_scale=2.0)(x)
             x = jnp.concatenate([x_emb, t_emb], axis=-1)
         else:
             x = jnp.concatenate([x, t], axis=-1)
@@ -79,7 +94,7 @@ class ModifiedMLP(nn.Module):
 
         if self.fourier_emb:
             # separate the spatial and temporal coordinates
-            t_emb = FourierEmbedding(emb_scale=2.0/5)(t)
+            t_emb = FourierEmbedding(emb_scale=2.0/4)(t)
             x_emb = FourierEmbedding(emb_scale=2.0)(x)
             x = jnp.concatenate([x_emb, t_emb], axis=-1)
         else:
