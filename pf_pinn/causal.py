@@ -24,28 +24,28 @@ class CausalWeightor:
         self.bins = jnp.linspace(t_range[0], t_range[1], num_chunks+1)
     
     
-    # def _update_causal_configs(self, causal_weights):
+    def update_causal_configs(self, causal_weights):
 
-    #     if causal_weights.min() > self.causal_configs["max_last_weight"] \
-    #         and self.causal_configs["eps"] < self.causal_configs["max_eps"]:
-    #             self.causal_configs["eps"] *= self.causal_configs["step_size"]
-    #             # print(f"Inc. eps to {self.causal_configs['eps']}")
+        if causal_weights.min() > self.causal_configs["max_last_weight"] \
+            and self.causal_configs["eps"] < self.causal_configs["max_eps"]:
+                self.causal_configs["eps"] *= self.causal_configs["step_size"]
+                # print(f"Inc. eps to {self.causal_configs['eps']}")
         
-    #     if jnp.mean(causal_weights) < self.causal_configs["min_mean_weight"]:
-    #         self.causal_configs["eps"] /= self.causal_configs["step_size"]
-    #         # print(f"Dec. eps to {self.causal_configs['eps']}")
+        if jnp.mean(causal_weights) < self.causal_configs["min_mean_weight"]:
+            self.causal_configs["eps"] /= self.causal_configs["step_size"]
+            # print(f"Dec. eps to {self.causal_configs['eps']}")
     
-    def _update_causal_configs(self):
-        eps_init = self.causal_configs["eps"]
-        causal_weights = self.causal_weights
+    # def _update_causal_configs(self):
+    #     eps_init = self.causal_configs["eps"]
+    #     causal_weights = self.causal_weights
         
-        cond1 = (causal_weights.min() > self.causal_configs["max_last_weight"]) & (eps_init < self.causal_configs["max_eps"])
-        eps_after_cond1 = jnp.where(cond1, eps_init * self.causal_configs["step_size"], eps_init)
+    #     cond1 = (causal_weights.min() > self.causal_configs["max_last_weight"]) & (eps_init < self.causal_configs["max_eps"])
+    #     eps_after_cond1 = jnp.where(cond1, eps_init * self.causal_configs["step_size"], eps_init)
 
-        cond2 = jnp.mean(causal_weights) < self.causal_configs["min_mean_weight"]
-        new_eps = jnp.where(cond2, eps_after_cond1 / self.causal_configs["step_size"], eps_after_cond1)
+    #     cond2 = jnp.mean(causal_weights) < self.causal_configs["min_mean_weight"]
+    #     new_eps = jnp.where(cond2, eps_after_cond1 / self.causal_configs["step_size"], eps_after_cond1)
 
-        self.causal_configs.update({"eps": new_eps})
+    #     self.causal_configs.update({"eps": new_eps})
 
 
     def _split_t(self, t: jnp.array, ):
@@ -94,7 +94,10 @@ class CausalWeightor:
         causal_loss = jnp.dot(loss_chunks, causal_weights)
         # self.aux_vars["causal_weights"] = jax.device_get(causal_weights)
         # self.aux_vars["loss_chunks"] = jax.device_get(loss_chunks)
-        return causal_loss
+        return causal_loss, {
+            "causal_weights": causal_weights,
+            "loss_chunks": loss_chunks
+        }
     
     
     def plot_causal_info(self, pde_name, causal_weights, loss_chunks):

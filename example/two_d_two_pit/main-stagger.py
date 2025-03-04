@@ -251,23 +251,28 @@ class PINN(nn.Module):
                              "should be equal to the number of items in the batch")
         losses = []
         grads = []
-        for loss_item_fn, batch_item in zip(self.loss_fn_panel, batch):
-
-            loss_item, grad_item = jax.value_and_grad(
-                loss_item_fn)(params, batch_item)
+        aux_vars = {}
+        for idx, (loss_item_fn, batch_item) in enumerate(zip(self.loss_fn_panel, batch)):
+            if idx == 0:
+                (loss_item, aux), grad_item = jax.value_and_grad(
+                    loss_item_fn, has_aux=True)(params, batch_item)
+                aux_vars.update(aux)
+            else:
+                loss_item, grad_item = jax.value_and_grad(
+                    loss_item_fn)(params, batch_item)
             losses.append(loss_item)
             grads.append(grad_item)
 
-        return jnp.array(losses), grads
+        return jnp.array(losses), grads, aux_vars
 
     @partial(jit, static_argnums=(0,))
     def loss_fn(self, params, batch,):
-        losses, grads = self.compute_losses_and_grads(params, batch)
+        losses, grads, aux_vars = self.compute_losses_and_grads(params, batch)
 
         weights = self.grad_norm_weights(grads)
         weights = jax.lax.stop_gradient(weights)
 
-        return jnp.sum(weights * losses), (losses, weights)
+        return jnp.sum(weights * losses), (losses, weights, aux_vars)
 
     @partial(jit, static_argnums=(0,))
     def grad_norm_weights(self, grads: list, eps=1e-6):
@@ -427,10 +432,10 @@ def create_train_state(model, rng, lr, **kwargs):
 @jit
 def train_step(state, batch):
     params = state.params
-    (weighted_loss, (loss_components, weight_components)), grads = jax.value_and_grad(
+    (weighted_loss, (loss_components, weight_components, aux_vars)), grads = jax.value_and_grad(
         pinn.loss_fn, has_aux=True, argnums=0)(params, batch)
     new_state = state.apply_gradients(grads=grads)
-    return new_state, (weighted_loss, loss_components, weight_components, pinn.aux_vars)
+    return new_state, (weighted_loss, loss_components, weight_components, aux_vars)
 
 
 init_key = random.PRNGKey(0)
@@ -484,7 +489,8 @@ for epoch in range(EPOCHS):
         sampler.adaptive_kw["params"].update(state.params)
         batch = sampler.sample(pde_name=pde_name)
     state, (weighted_loss, loss_components,
-            weight_components) = train_step(state, batch)
+            weight_components, aux_vars) = train_step(state, batch)
+    pinn.causal_weightor.causal_weights(aux_vars["causal_weights"])
     if epoch % (PAUSE_EVERY//2) == 0:
         fig, error = evaluate2D(
             pinn, state.params,
@@ -513,9 +519,11 @@ for epoch in range(EPOCHS):
         metrics_tracker.register_figure(epoch, fig, "error")
         plt.close(fig)
         
-        # fig = pinn.causal_weightor.plot_causal_info(pde_name)
-        # metrics_tracker.register_figure(epoch, fig, "causal_info")
-        # plt.close(fig)
+        fig = pinn.causal_weightor.plot_causal_info(pde_name, 
+                                                    aux_vars["causal_weights"],
+                                                    aux_vars["loss_chunks"])
+        metrics_tracker.register_figure(epoch, fig, "causal_info")
+        plt.close(fig)
         
         metrics_tracker.flush()
         
