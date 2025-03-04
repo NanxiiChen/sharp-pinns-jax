@@ -34,7 +34,7 @@ class PINN(nn.Module):
                               self.loss_irr, self.loss_flux]
         self.pde_name = "ac"
         self.aux_vars = {}
-        self.causal_weightor = CausalWeightor(num_chunks=CHUNKS, t_range=(0.0, 1.0))
+        self.causal_weightor = CausalWeightor(num_chunks=CHUNKS, t_range=(0.0, 1.0), pde_name="ac")
         arch = {"mlp": MLP, "modified_mlp": ModifiedMLP}
         self.model = arch[arch_name](act_name=act_name, num_layers=num_layers,
                                      hidden_dim=hidden_dim, out_dim=out_dim, fourier_emb=fourier_emb)
@@ -181,7 +181,7 @@ class PINN(nn.Module):
     @partial(jit, static_argnums=(0,))
     def net_speed(self, params, x, t):
         jac_dt = jax.jacrev(self.net_u, argnums=2)
-        dphi_dt, dc_dt = jac_dt(params, x, t)
+        dphi_dt, dc_dt = jac_dt(params, x, t) * Tc
         return dphi_dt, dc_dt
     
     @partial(jit, static_argnums=(0,))
@@ -209,7 +209,7 @@ class PINN(nn.Module):
         return jnp.mean(ch ** 2)
     
     @partial(jit, static_argnums=(0,))
-    def loss_pde(self, params, batch):
+    def loss_pde(self, params, batch, eps):
         x, t = batch
         pde_name = self.pde_name
         pde_fn = self.net_ac if pde_name == "ac" else self.net_ch
@@ -217,7 +217,7 @@ class PINN(nn.Module):
         if not CAUSAL_WEIGHT:
             return jnp.mean(res ** 2)
         else:
-            return self.causal_weightor.compute_causal_loss(res, t)
+            return self.causal_weightor.compute_causal_loss(res, t, eps)
 
     @partial(jit, static_argnums=(0,))
     def loss_ic(self, params, batch):
@@ -245,7 +245,7 @@ class PINN(nn.Module):
         return jnp.mean(dphi_dy ** 2) + jnp.mean(dc_dy ** 2)
         
     @partial(jit, static_argnums=(0,))
-    def compute_losses_and_grads(self, params, batch):
+    def compute_losses_and_grads(self, params, batch, eps):
         if len(batch) != len(self.loss_fn_panel):
             raise ValueError("The number of loss functions "
                              "should be equal to the number of items in the batch")
@@ -255,7 +255,7 @@ class PINN(nn.Module):
         for idx, (loss_item_fn, batch_item) in enumerate(zip(self.loss_fn_panel, batch)):
             if idx == 0:
                 (loss_item, aux), grad_item = jax.value_and_grad(
-                    loss_item_fn, has_aux=True)(params, batch_item)
+                    loss_item_fn, has_aux=True)(params, batch_item, eps)
                 aux_vars.update(aux)
             else:
                 loss_item, grad_item = jax.value_and_grad(
@@ -266,8 +266,8 @@ class PINN(nn.Module):
         return jnp.array(losses), grads, aux_vars
 
     @partial(jit, static_argnums=(0,))
-    def loss_fn(self, params, batch,):
-        losses, grads, aux_vars = self.compute_losses_and_grads(params, batch)
+    def loss_fn(self, params, batch, eps):
+        losses, grads, aux_vars = self.compute_losses_and_grads(params, batch, eps)
 
         weights = self.grad_norm_weights(grads)
         weights = jax.lax.stop_gradient(weights)
@@ -313,8 +313,8 @@ class Sampler:
         return adaptive_base[indices]
 
     def sample_pde(self):
-        data = lhs_sampling(self.mins, self.maxs, self.n_samples**3)
-        # data = shfted_grid(self.mins, self.maxs, [self.n_samples, self.n_samples, self.n_samples*2], self.key)
+        # data = lhs_sampling(self.mins, self.maxs, self.n_samples**3)
+        data = shfted_grid(self.mins, self.maxs, [self.n_samples, self.n_samples, self.n_samples*3], self.key)
         return data[:, :-1], data[:, -1:]
 
     def sample_ac(self):
@@ -430,10 +430,10 @@ def create_train_state(model, rng, lr, **kwargs):
 
 
 @jit
-def train_step(state, batch):
+def train_step(state, batch, eps):
     params = state.params
     (weighted_loss, (loss_components, weight_components, aux_vars)), grads = jax.value_and_grad(
-        pinn.loss_fn, has_aux=True, argnums=0)(params, batch)
+        pinn.loss_fn, has_aux=True, argnums=0)(params, batch, eps)
     new_state = state.apply_gradients(grads=grads)
     return new_state, (weighted_loss, loss_components, weight_components, aux_vars)
 
@@ -475,6 +475,7 @@ start_time = time.time()
 for epoch in range(EPOCHS):
     pde_name = "ac" if (epoch % PAUSE_EVERY) < (PAUSE_EVERY // 2) else "ch"
     pinn.pde_name = pde_name
+    pinn.causal_weightor.pde_name = pde_name
     # pinn.causal_weightor = causal_weightor_ac if pde_name == "ac" else causal_weightor_ch
     # pde_name = "ch" if (epoch % PAUSE_EVERY) < (PAUSE_EVERY // 2) else "ac"
     # pinn.loss_fn_panel = [
@@ -489,8 +490,8 @@ for epoch in range(EPOCHS):
         sampler.adaptive_kw["params"].update(state.params)
         batch = sampler.sample(pde_name=pde_name)
     state, (weighted_loss, loss_components,
-            weight_components, aux_vars) = train_step(state, batch)
-    pinn.causal_weightor.update_causal_configs(aux_vars["causal_weights"])
+            weight_components, aux_vars) = train_step(state, batch, CAUSAL_CONFIGS[pde_name + "_eps"])
+    update_causal_eps(aux_vars["causal_weights"], CAUSAL_CONFIGS, pde_name)
     if epoch % (PAUSE_EVERY//2) == 0:
         fig, error = evaluate2D(
             pinn, state.params,
@@ -521,7 +522,8 @@ for epoch in range(EPOCHS):
         
         fig = pinn.causal_weightor.plot_causal_info(pde_name, 
                                                     aux_vars["causal_weights"],
-                                                    aux_vars["loss_chunks"])
+                                                    aux_vars["loss_chunks"],
+                                                    CAUSAL_CONFIGS[pde_name + "_eps"])
         metrics_tracker.register_figure(epoch, fig, "causal_info")
         plt.close(fig)
         

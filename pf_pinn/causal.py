@@ -11,63 +11,37 @@ import matplotlib.pyplot as plt
 
 
 class CausalWeightor:
-    def __init__(self, num_chunks: int, t_range: tuple):
-        self.causal_configs = {
-            "eps": 1e-3,
-            "step_size": 10,
-            "max_last_weight": 0.99,
-            "min_mean_weight": 0.5,
-            "max_eps": 1e-3
-        }
+    def __init__(self, num_chunks: int, t_range: tuple, pde_name="ac"):
+
         self.num_chunks = num_chunks
         self.t_range = t_range
         self.bins = jnp.linspace(t_range[0], t_range[1], num_chunks+1)
+        self.pde_name = pde_name
     
-    
-    def update_causal_configs(self, causal_weights):
 
-        if causal_weights.min() > self.causal_configs["max_last_weight"] \
-            and self.causal_configs["eps"] < self.causal_configs["max_eps"]:
-                self.causal_configs["eps"] *= self.causal_configs["step_size"]
-                # print(f"Inc. eps to {self.causal_configs['eps']}")
-        
-        if jnp.mean(causal_weights) < self.causal_configs["min_mean_weight"]:
-            self.causal_configs["eps"] /= self.causal_configs["step_size"]
-            # print(f"Dec. eps to {self.causal_configs['eps']}")
-    
-    # def _update_causal_configs(self):
-    #     eps_init = self.causal_configs["eps"]
-    #     causal_weights = self.causal_weights
-        
-    #     cond1 = (causal_weights.min() > self.causal_configs["max_last_weight"]) & (eps_init < self.causal_configs["max_eps"])
-    #     eps_after_cond1 = jnp.where(cond1, eps_init * self.causal_configs["step_size"], eps_init)
+            
 
-    #     cond2 = jnp.mean(causal_weights) < self.causal_configs["min_mean_weight"]
-    #     new_eps = jnp.where(cond2, eps_after_cond1 / self.causal_configs["step_size"], eps_after_cond1)
+    # def _split_t(self, t: jnp.array, ):
+    #     num = self.num_chunks
+    #     bins = self.bins
+    #     t_idx = jnp.digitize(t, bins) - 1
 
-    #     self.causal_configs.update({"eps": new_eps})
+    #     return [jnp.where(t_idx == int(i))[0] for i in range(num)]
 
-
-    def _split_t(self, t: jnp.array, ):
-        num = self.num_chunks
-        bins = self.bins
-        t_idx = jnp.digitize(t, bins) - 1
-
-        return [jnp.where(t_idx == int(i))[0] for i in range(num)]
-
-    def _compute_causal_weight(self, loss_chunks: jnp.array):
-        eps = self.causal_configs["eps"]
-        weights = jnp.zeros(self.num_chunks)
+    # @partial(jax.jit, static_argnums=(0,))
+    def compute_causal_weight(self, loss_chunks: jnp.array, eps: jnp.array):
+        weights = []
         for chunk_id in range(self.num_chunks):
             if chunk_id == 0:
-                weights = weights.at[chunk_id].set(1.0)
+                weights.append(1.0)
             else:
-                weights = weights.at[chunk_id].set(jnp.exp(
+                
+                weights.append(jnp.exp(
                     -eps * jnp.sum(loss_chunks[:chunk_id])
                 ))
-        weights = jax.lax.stop_gradient(weights)
+
+        return jax.lax.stop_gradient(jnp.array(weights))
         # self.causal_weights = jax.device_get(weights)
-        return weights
 
     # @partial(jax.jit, static_argnums=(0,))
     # def compute_causal_loss(self, residuals: jnp.array, t: jnp.array):
@@ -81,26 +55,25 @@ class CausalWeightor:
     #     self.caual_loss = causal_loss
     #     return causal_loss
     
-    def compute_causal_loss(self, residuals: jnp.array, t: jnp.array):
-        # 1. 计算每个样本所在的分段编号
+    # @partial(jax.jit, static_argnums=(0,))
+    def compute_causal_loss(self, residuals: jnp.array, t: jnp.array, eps: jnp.array):
         t_idx = jnp.digitize(t.flatten(), self.bins) - 1
-        
 
-        sum_residuals_sq = jax.ops.segment_sum(residuals**2, t_idx, num_segments=self.num_chunks)
-        count_residuals = jax.ops.segment_sum(jnp.ones_like(residuals), t_idx, num_segments=self.num_chunks)
+        sum_residuals_sq = jax.ops.segment_sum(residuals**2, \
+            t_idx, num_segments=self.num_chunks)
+        count_residuals = jax.ops.segment_sum(jnp.ones_like(residuals), \
+            t_idx, num_segments=self.num_chunks)
         loss_chunks = sum_residuals_sq / (count_residuals + 1e-12)
         
-        causal_weights = self._compute_causal_weight(loss_chunks)
+        causal_weights = self.compute_causal_weight(loss_chunks, eps)
         causal_loss = jnp.dot(loss_chunks, causal_weights)
-        # self.aux_vars["causal_weights"] = jax.device_get(causal_weights)
-        # self.aux_vars["loss_chunks"] = jax.device_get(loss_chunks)
         return causal_loss, {
             "causal_weights": causal_weights,
             "loss_chunks": loss_chunks
         }
     
     
-    def plot_causal_info(self, pde_name, causal_weights, loss_chunks):
+    def plot_causal_info(self, pde_name, causal_weights, loss_chunks, eps):
         
         bins = (self.bins[1:] + self.bins[:-1]) / 2
         
@@ -114,12 +87,37 @@ class CausalWeightor:
         ax.plot(bins, loss_chunks, marker="o")
         ax.set(xlabel="Time chunks", ylabel="Causal loss", title=f"Causal loss for {pde_name}")
         
+        fig.suptitle(f"EPS: {eps:.2e}")
+        
         return fig
         
         
-
         
+def update_causal_eps(causal_weight, causal_configs, pde_name):
     
+    if causal_weight.min() > causal_configs["max_last_weight"] \
+        and causal_configs[pde_name + "_eps"] < causal_configs["max_eps"]:
+            causal_configs[pde_name + "_eps"] *= causal_configs["step_size"]
+            print(f"Inc. eps to {causal_configs[pde_name + '_eps']}")
+            
+    if jnp.mean(causal_weight) < causal_configs["min_mean_weight"]:
+        causal_configs[pde_name + "_eps"] /= causal_configs["step_size"]
+        print(f"Dec. eps to {causal_configs[pde_name + '_eps']}")
+            
+    
+    
+    # @partial(jax.jit, static_argnums=(0,))
+    # def update_causal_configs(self, causal_weights: jnp.array):
+    #     cfgs = self.causal_configs[self.pde_name]
+
+    #     if causal_weights.min() > cfgs["max_last_weight"] \
+    #         and cfgs["eps"] < cfgs["max_eps"]:
+    #             cfgs["eps"] *= cfgs["step_size"]
+    #             print(f"Inc. eps to {cfgs['eps']}")
+        
+    #     if jnp.mean(causal_weights) < cfgs["min_mean_weight"]:
+    #         cfgs["eps"] /= cfgs["step_size"]
+    #         print(f"Dec. eps to {cfgs['eps']}")
 
 if __name__ == "__main__":
     t = jnp.array([0.0, 0.1, 0.7, 0.9, 0.3, 0.5, 1.0]).reshape(-1, 1)
