@@ -22,6 +22,7 @@ ARCH_NAME = "modified_mlp"
 FOURIER_EMB = True
 
 
+
 ALPHA_PHI = 1.03e-4
 OMEGA_PHI = 1.76e7
 MM = 7.94e-18

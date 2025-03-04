@@ -11,5 +11,5 @@ class MetricsTracker(SummaryWriter):
         for name, value in metrics_dict.items():
             self.add_scalar(name, value, step)
 
-    def register_figure(self, step: int, fig):
-        self.add_figure("figure", fig, step)
+    def register_figure(self, step: int, fig, fig_name: str):
+        self.add_figure(fig_name, fig, step)

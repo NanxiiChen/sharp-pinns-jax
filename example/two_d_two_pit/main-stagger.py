@@ -1,6 +1,3 @@
-# TODO: Causal weighting
-
-
 import datetime
 import sys
 import time
@@ -33,10 +30,15 @@ class PINN(nn.Module):
                  fourier_emb=True, arch_name="mlp"):
         super().__init__()
 
-        self.loss_fn_panel = []
+        self.loss_fn_panel = [self.loss_pde, self.loss_ic, self.loss_bc,
+                              self.loss_irr, self.loss_flux]
+        self.pde_name = "ac"
+        self.aux_vars = {}
+        self.causal_weightor = CausalWeightor(num_chunks=CHUNKS, t_range=(0.0, 1.0))
         arch = {"mlp": MLP, "modified_mlp": ModifiedMLP}
         self.model = arch[arch_name](act_name=act_name, num_layers=num_layers,
                                      hidden_dim=hidden_dim, out_dim=out_dim, fourier_emb=fourier_emb)
+        
 
     @partial(jit, static_argnums=(0,))
     def ref_sol_bc(self, x, t):
@@ -205,6 +207,17 @@ class PINN(nn.Module):
         # _, ch = vmap(self.net_pde, in_axes=(None, 0, 0))(params, x, t)
         ch = vmap(self.net_ch, in_axes=(None, 0, 0))(params, x, t)
         return jnp.mean(ch ** 2)
+    
+    @partial(jit, static_argnums=(0,))
+    def loss_pde(self, params, batch):
+        x, t = batch
+        pde_name = self.pde_name
+        pde_fn = self.net_ac if pde_name == "ac" else self.net_ch
+        res = vmap(pde_fn, in_axes=(None, 0, 0))(params, x, t)
+        if not CAUSAL_WEIGHT:
+            return jnp.mean(res ** 2)
+        else:
+            return self.causal_weightor.compute_causal_loss(res, t)
 
     @partial(jit, static_argnums=(0,))
     def loss_ic(self, params, batch):
@@ -417,7 +430,7 @@ def train_step(state, batch):
     (weighted_loss, (loss_components, weight_components)), grads = jax.value_and_grad(
         pinn.loss_fn, has_aux=True, argnums=0)(params, batch)
     new_state = state.apply_gradients(grads=grads)
-    return new_state, (weighted_loss, loss_components, weight_components)
+    return new_state, (weighted_loss, loss_components, weight_components, pinn.aux_vars)
 
 
 init_key = random.PRNGKey(0)
@@ -449,18 +462,23 @@ sampler = Sampler(
     }
 )
 
+# causal_weightor_ac = CausalWeightor(num_chunks=CHUNKS, t_range=(0.0, 1.0), pinn.aux_vars)
+# causal_weightor_ch = CausalWeightor(num_chunks=CHUNKS, t_range=(0.0, 1.0))
+
 
 start_time = time.time()
 for epoch in range(EPOCHS):
     pde_name = "ac" if (epoch % PAUSE_EVERY) < (PAUSE_EVERY // 2) else "ch"
+    pinn.pde_name = pde_name
+    # pinn.causal_weightor = causal_weightor_ac if pde_name == "ac" else causal_weightor_ch
     # pde_name = "ch" if (epoch % PAUSE_EVERY) < (PAUSE_EVERY // 2) else "ac"
-    pinn.loss_fn_panel = [
-        getattr(pinn, f"loss_{pde_name}"),
-        pinn.loss_ic,
-        pinn.loss_bc,
-        pinn.loss_irr,
-        pinn.loss_flux
-    ]
+    # pinn.loss_fn_panel = [
+    #     getattr(pinn, f"loss_{pde_name}"),
+    #     pinn.loss_ic,
+    #     pinn.loss_bc,
+    #     pinn.loss_irr,
+    #     pinn.loss_flux
+    # ]
 
     if epoch % (PAUSE_EVERY//2) == 0:
         sampler.adaptive_kw["params"].update(state.params)
@@ -492,9 +510,16 @@ for epoch in range(EPOCHS):
             "weight/flux": weight_components[4],
             "error/error": error
         })
-        metrics_tracker.register_figure(epoch, fig)
-        metrics_tracker.flush()
+        metrics_tracker.register_figure(epoch, fig, "error")
         plt.close(fig)
+        
+        # fig = pinn.causal_weightor.plot_causal_info(pde_name)
+        # metrics_tracker.register_figure(epoch, fig, "causal_info")
+        # plt.close(fig)
+        
+        metrics_tracker.flush()
+        
+        
 
 
 # save the model
