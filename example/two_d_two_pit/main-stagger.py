@@ -490,7 +490,7 @@ for epoch in range(EPOCHS):
         batch = sampler.sample(pde_name=pde_name)
     state, (weighted_loss, loss_components,
             weight_components, aux_vars) = train_step(state, batch)
-    pinn.causal_weightor.causal_weights(aux_vars["causal_weights"])
+    pinn.causal_weightor.update_causal_configs(aux_vars["causal_weights"])
     if epoch % (PAUSE_EVERY//2) == 0:
         fig, error = evaluate2D(
             pinn, state.params,
