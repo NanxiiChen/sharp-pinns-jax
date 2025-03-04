@@ -94,7 +94,7 @@ class ModifiedMLP(nn.Module):
 
         if self.fourier_emb:
             # separate the spatial and temporal coordinates
-            t_emb = FourierEmbedding(emb_scale=2.0)(t)
+            t_emb = FourierEmbedding(emb_scale=2.0/5)(t)
             x_emb = FourierEmbedding(emb_scale=2.0)(x)
             x = jnp.concatenate([x_emb, t_emb], axis=-1)
         else:

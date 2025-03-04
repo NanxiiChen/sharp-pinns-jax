@@ -5,7 +5,7 @@ N_SAMPLES = 25
 LR = 5e-4
 DECAY = 0.9
 DECAY_EVERY = 200
-PAUSE_EVERY = 50
+PAUSE_EVERY = 20
 
 
 DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 1]]
