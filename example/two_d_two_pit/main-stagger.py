@@ -15,8 +15,8 @@ from jax import jit, random, vmap
 from jax.flatten_util import ravel_pytree
 
 current_dir = Path(__file__).resolve().parent  # 当前文件所在目录 (example1)
-project_root = current_dir.parent.parent       # 向上两级到 project_working_dir
-sys.path.append(str(project_root))             # 将根目录加入模块搜索路径
+project_root = current_dir.parent.parent  # 向上两级到 project_working_dir
+sys.path.append(str(project_root))  # 将根目录加入模块搜索路径
 
 from pf_pinn import *
 from example.two_d_two_pit.configs import *
@@ -24,21 +24,40 @@ from example.two_d_two_pit.configs import *
 # from jax import config
 # config.update("jax_disable_jit", True)
 
+
 class PINN(nn.Module):
 
-    def __init__(self, num_layers, hidden_dim, out_dim, act_name,
-                 fourier_emb=True, arch_name="mlp"):
+    def __init__(
+        self,
+        num_layers,
+        hidden_dim,
+        out_dim,
+        act_name,
+        fourier_emb=True,
+        arch_name="mlp",
+    ):
         super().__init__()
 
-        self.loss_fn_panel = [self.loss_pde, self.loss_ic, self.loss_bc,
-                              self.loss_irr, self.loss_flux]
+        self.loss_fn_panel = [
+            self.loss_pde,
+            self.loss_ic,
+            self.loss_bc,
+            self.loss_irr,
+            self.loss_flux,
+        ]
         self.pde_name = "ac"
         self.aux_vars = {}
-        self.causal_weightor = CausalWeightor(num_chunks=CHUNKS, t_range=(0.0, 1.0), pde_name="ac")
+        self.causal_weightor = CausalWeightor(
+            num_chunks=CHUNKS, t_range=(0.0, 1.0), pde_name="ac"
+        )
         arch = {"mlp": MLP, "modified_mlp": ModifiedMLP}
-        self.model = arch[arch_name](act_name=act_name, num_layers=num_layers,
-                                     hidden_dim=hidden_dim, out_dim=out_dim, fourier_emb=fourier_emb)
-        
+        self.model = arch[arch_name](
+            act_name=act_name,
+            num_layers=num_layers,
+            hidden_dim=hidden_dim,
+            out_dim=out_dim,
+            fourier_emb=fourier_emb,
+        )
 
     @partial(jit, static_argnums=(0,))
     def ref_sol_bc(self, x, t):
@@ -54,29 +73,37 @@ class PINN(nn.Module):
     @partial(jit, static_argnums=(0,))
     def ref_sol_ic(self, x, t):
         r = jnp.sqrt((jnp.abs(x[:, 0]) - 0.15) ** 2 + x[:, 1] ** 2)
-        phi = 1 - (1 - jnp.tanh(jnp.sqrt(OMEGA_PHI) /
-                            jnp.sqrt(2 * ALPHA_PHI) * (r-0.05) * Lc)) / 2
+        phi = (
+            1
+            - (
+                1
+                - jnp.tanh(
+                    jnp.sqrt(OMEGA_PHI) / jnp.sqrt(2 * ALPHA_PHI) * (r - 0.05) * Lc
+                )
+            )
+            / 2
+        )
         h_phi = -2 * phi**3 + 3 * phi**2
         c = h_phi * CSE + (1 - h_phi) * 0.0
         sol = jnp.stack([phi, c], axis=1)
         return jax.lax.stop_gradient(sol)
 
-
     def grad(self, func: Callable, argnums: int):
-        return jax.grad(lambda *args, **kwargs: func(*args, **kwargs).sum(), argnums=argnums)
+        return jax.grad(
+            lambda *args, **kwargs: func(*args, **kwargs).sum(), argnums=argnums
+        )
 
     @partial(jit, static_argnums=(0,))
     def net_u(self, params, x, t):
-        
+
         def hard_cons(params, x, t):
             phi, cl = nn.tanh(self.model.apply(params, x, t)) / 2 + 0.5
             cl = cl * (1 - CSE + CLE)
-            c = (CSE - CLE) * (-2*phi**3 + 3*phi**2) + cl
+            c = (CSE - CLE) * (-2 * phi**3 + 3 * phi**2) + cl
             return jnp.stack([phi, c], axis=0)
-        
+
         return (
-            hard_cons(params, x, t) \
-            + hard_cons(params, x * jnp.array([-1, 1]), t)
+            hard_cons(params, x, t) + hard_cons(params, x * jnp.array([-1, 1]), t)
         ) / 2
         # return hard_cons(params, x, t)
 
@@ -91,7 +118,7 @@ class PINN(nn.Module):
         phi, c = self.net_u(params, x, t)
         h_phi = -2 * phi**3 + 3 * phi**2
         dh_dphi = -6 * phi**2 + 6 * phi
-        g_phi = phi**2 * (1 - phi)**2
+        g_phi = phi**2 * (1 - phi) ** 2
         dg_dphi = 4 * phi**3 - 6 * phi**2 + 2 * phi
 
         jac = jax.jacrev(self.net_u, argnums=(1, 2))
@@ -104,16 +131,17 @@ class PINN(nn.Module):
         nabla2phi = d2phi_dx2
         nabla2c = d2c_dx2
 
-        nabla2_hphi = 6 * (
-            phi * (1 - phi) * nabla2phi
-            + (1 - 2*phi) * dphi_dx**2
-        )
+        nabla2_hphi = 6 * (phi * (1 - phi) * nabla2phi + (1 - 2 * phi) * dphi_dx**2)
 
         ch = dc_dt - CH1 * nabla2c + CH1 * (CSE - CLE) * nabla2_hphi
-        ac = dphi_dt - AC1 * (c - h_phi*(CSE-CLE) - CLE) * (CSE-CLE) * dh_dphi \
-            + AC2 * dg_dphi - AC3 * nabla2phi
+        ac = (
+            dphi_dt
+            - AC1 * (c - h_phi * (CSE - CLE) - CLE) * (CSE - CLE) * dh_dphi
+            + AC2 * dg_dphi
+            - AC3 * nabla2phi
+        )
 
-        return [ac/AC_PRE_SCALE, ch/CH_PRE_SCALE]
+        return [ac / AC_PRE_SCALE, ch / CH_PRE_SCALE]
 
     @partial(jit, static_argnums=(0,))
     def net_ac(self, params, x, t):
@@ -127,17 +155,18 @@ class PINN(nn.Module):
         dh_dphi = -6 * phi**2 + 6 * phi
         dg_dphi = 4 * phi**3 - 6 * phi**2 + 2 * phi
 
-        jac_phi_t = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0],
-                         argnums=1)
+        jac_phi_t = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0], argnums=1)
         dphi_dt = jac_phi_t(x, t)
 
-        hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0],
-                           argnums=0)
+        hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0], argnums=0)
         nabla2phi = jnp.linalg.trace(hess_phi_x(x, t))
-        
 
-        ac = dphi_dt - AC1 * (c - h_phi*(CSE-CLE) - CLE) * (CSE-CLE) * dh_dphi \
-            + AC2 * dg_dphi - AC3 * nabla2phi
+        ac = (
+            dphi_dt
+            - AC1 * (c - h_phi * (CSE - CLE) - CLE) * (CSE - CLE) * dh_dphi
+            + AC2 * dg_dphi
+            - AC3 * nabla2phi
+        )
         return ac.squeeze() / AC_PRE_SCALE
 
     @partial(jit, static_argnums=(0,))
@@ -150,64 +179,64 @@ class PINN(nn.Module):
         # jac = jax.jacrev(self.net_u, argnums=(1, 2))
         # dphi_dx, dc_dx = jac(params, x, t)[0]
         # dphi_dt, dc_dt = jac(params, x, t)[1]
-        
-        jac_phi_x = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0],
-                                 argnums=0)
+
+        jac_phi_x = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0], argnums=0)
         dphi_dx = jac_phi_x(x, t)
-        
-        jac_c_t = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1],
-                             argnums=1)
+
+        jac_c_t = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1], argnums=1)
         dc_dt = jac_c_t(x, t)
 
         # hess = jax.hessian(self.net_u, argnums=(1))
         # hess_phi_x, hess_c_x = hess(params, x, t)
-        hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0],
-                                    argnums=0)(x, t)
-        hess_c_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[1],
-                                argnums=0)(x, t)
+        hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0], argnums=0)(
+            x, t
+        )
+        hess_c_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(
+            x, t
+        )
 
         nabla2phi = jnp.linalg.trace(hess_phi_x)
         nabla2c = jnp.linalg.trace(hess_c_x)
 
         nabla2_hphi = 6 * (
-            phi * (1 - phi) * nabla2phi
-            + (1 - 2*phi) * jnp.sum(dphi_dx**2)
+            phi * (1 - phi) * nabla2phi + (1 - 2 * phi) * jnp.sum(dphi_dx**2)
         )
 
         ch = dc_dt - CH1 * nabla2c + CH1 * (CSE - CLE) * nabla2_hphi
 
         return ch.squeeze() / CH_PRE_SCALE
-    
+
     @partial(jit, static_argnums=(0,))
     def net_speed(self, params, x, t):
         jac_dt = jax.jacrev(self.net_u, argnums=2)
         dphi_dt, dc_dt = jac_dt(params, x, t) * Tc
         return dphi_dt, dc_dt
-    
+
     @partial(jit, static_argnums=(0,))
     def net_nabla(self, params, x, t, on="y"):
         idx = 1 if on == "y" else 0
-        nabla_phi_part = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0],
-                            argnums=0)(x, t)[idx]
-        nabla_c_part = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1],
-                            argnums=0)(x, t)[idx]
+        nabla_phi_part = jax.jacrev(
+            lambda x, t: self.net_u(params, x, t)[0], argnums=0
+        )(x, t)[idx]
+        nabla_c_part = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(
+            x, t
+        )[idx]
         return nabla_phi_part, nabla_c_part
-
 
     @partial(jit, static_argnums=(0,))
     def loss_ac(self, params, batch):
         x, t = batch
         # ac, _ = vmap(self.net_pde, in_axes=(None, 0, 0))(params, x, t)
         ac = vmap(self.net_ac, in_axes=(None, 0, 0))(params, x, t)
-        return jnp.mean(ac ** 2)
+        return jnp.mean(ac**2)
 
     @partial(jit, static_argnums=(0,))
     def loss_ch(self, params, batch):
         x, t = batch
         # _, ch = vmap(self.net_pde, in_axes=(None, 0, 0))(params, x, t)
         ch = vmap(self.net_ch, in_axes=(None, 0, 0))(params, x, t)
-        return jnp.mean(ch ** 2)
-    
+        return jnp.mean(ch**2)
+
     @partial(jit, static_argnums=(0,))
     def loss_pde(self, params, batch, eps):
         x, t = batch
@@ -215,7 +244,7 @@ class PINN(nn.Module):
         pde_fn = self.net_ac if pde_name == "ac" else self.net_ch
         res = vmap(pde_fn, in_axes=(None, 0, 0))(params, x, t)
         if not CAUSAL_WEIGHT:
-            return jnp.mean(res ** 2)
+            return jnp.mean(res**2)
         else:
             return self.causal_weightor.compute_causal_loss(res, t, eps)
 
@@ -230,36 +259,42 @@ class PINN(nn.Module):
         x, t = batch
         u = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
         return jnp.mean((u - self.ref_sol_bc(x, t)) ** 2)
-    
+
     @partial(jit, static_argnums=(0,))
     def loss_irr(self, params, batch):
         x, t = batch
         dphi_dt, dc_dt = vmap(self.net_speed, in_axes=(None, 0, 0))(params, x, t)
         # dphi_dt must be negative, use relu to ensure it
         return jnp.mean(jax.nn.relu(dphi_dt)) + jnp.mean(jax.nn.relu(dc_dt))
-    
+
     @partial(jit, static_argnums=(0,))
     def loss_flux(self, params, batch):
         x, t = batch
         dphi_dy, dc_dy = vmap(self.net_nabla, in_axes=(None, 0, 0))(params, x, t)
-        return jnp.mean(dphi_dy ** 2) + jnp.mean(dc_dy ** 2)
-        
+        return jnp.mean(dphi_dy**2) + jnp.mean(dc_dy**2)
+
     @partial(jit, static_argnums=(0,))
     def compute_losses_and_grads(self, params, batch, eps):
         if len(batch) != len(self.loss_fn_panel):
-            raise ValueError("The number of loss functions "
-                             "should be equal to the number of items in the batch")
+            raise ValueError(
+                "The number of loss functions "
+                "should be equal to the number of items in the batch"
+            )
         losses = []
         grads = []
         aux_vars = {}
-        for idx, (loss_item_fn, batch_item) in enumerate(zip(self.loss_fn_panel, batch)):
+        for idx, (loss_item_fn, batch_item) in enumerate(
+            zip(self.loss_fn_panel, batch)
+        ):
             if idx == 0:
                 (loss_item, aux), grad_item = jax.value_and_grad(
-                    loss_item_fn, has_aux=True)(params, batch_item, eps)
+                    loss_item_fn, has_aux=True
+                )(params, batch_item, eps)
                 aux_vars.update(aux)
             else:
-                loss_item, grad_item = jax.value_and_grad(
-                    loss_item_fn)(params, batch_item)
+                loss_item, grad_item = jax.value_and_grad(loss_item_fn)(
+                    params, batch_item
+                )
             losses.append(loss_item)
             grads.append(grad_item)
 
@@ -280,23 +315,26 @@ class PINN(nn.Module):
         grad_norms = [jnp.linalg.norm(grad) for grad in grads_flat]
         grad_norms = jnp.array(grad_norms)
         # grad clipping within [1e-8, 1e8]
-        grad_norms = jnp.clip(grad_norms, eps, 1/eps)
+        grad_norms = jnp.clip(grad_norms, eps, 1 / eps)
         weights = jnp.mean(grad_norms) / (grad_norms + eps)
         weights = jnp.nan_to_num(weights)
-        weights = jnp.clip(weights, eps, 1/eps)
+        weights = jnp.clip(weights, eps, 1 / eps)
         return weights
 
 
 class Sampler:
 
-    def __init__(self, n_samples,
-                 domain=((-0.5, 0.5), (0, 0.5), (0, 1)),
-                 key=random.PRNGKey(0),
-                 adaptive_kw={
-                     "ratio": 10,
-                     "model": None,
-                     "state": None,
-                 }):
+    def __init__(
+        self,
+        n_samples,
+        domain=((-0.5, 0.5), (0, 0.5), (0, 1)),
+        key=random.PRNGKey(0),
+        adaptive_kw={
+            "ratio": 10,
+            "model": None,
+            "state": None,
+        },
+    ):
         self.n_samples = n_samples
         self.domain = domain
         self.adaptive_kw = adaptive_kw
@@ -305,16 +343,23 @@ class Sampler:
         self.maxs = [d[1] for d in domain]
 
     def adaptive_sampling(self, residual_fn):
-        adaptive_base = lhs_sampling(self.mins, self.maxs,
-                                     self.n_samples**3 * self.adaptive_kw["ratio"])
+        adaptive_base = lhs_sampling(
+            self.mins, self.maxs, self.n_samples**3 * self.adaptive_kw["ratio"]
+        )
         residuals = residual_fn(adaptive_base)
-        max_residuals, indices = jax.lax.top_k(jnp.abs(residuals),
-                                               self.n_samples**3 // 5)
+        max_residuals, indices = jax.lax.top_k(
+            jnp.abs(residuals), self.n_samples**3 // 5
+        )
         return adaptive_base[indices]
 
     def sample_pde(self):
         # data = lhs_sampling(self.mins, self.maxs, self.n_samples**3)
-        data = shfted_grid(self.mins, self.maxs, [self.n_samples, self.n_samples, self.n_samples*3], self.key)
+        data = shfted_grid(
+            self.mins,
+            self.maxs,
+            [self.n_samples, self.n_samples, self.n_samples * 3],
+            self.key,
+        )
         return data[:, :-1], data[:, -1:]
 
     def sample_ac(self):
@@ -347,12 +392,10 @@ class Sampler:
         x = lhs_sampling(
             mins=[self.domain[0][0], self.domain[1][0]],
             maxs=[self.domain[0][1], self.domain[1][1]],
-            num=self.n_samples**2 * 2
+            num=self.n_samples**2 * 2,
         )
         x_local = lhs_sampling(
-            mins=[-0.3, 0],
-            maxs=[0.3, 0.15],
-            num=self.n_samples**2 * 2
+            mins=[-0.3, 0], maxs=[0.3, 0.15], num=self.n_samples**2 * 2
         )
         x = jnp.concatenate([x, x_local], axis=0)
         t = jnp.zeros_like(x[:, 0:1])
@@ -368,41 +411,53 @@ class Sampler:
         x1t = lhs_sampling(
             mins=[self.domain[0][0], self.domain[2][0]],
             maxs=[self.domain[0][1], self.domain[2][1]],
-            num=self.n_samples**2/5
+            num=self.n_samples**2 / 5,
         )
-        top = jnp.concatenate([x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1])*self.domain[1][1], 
-                               x1t[:, 1:2]], axis=1)
+        top = jnp.concatenate(
+            [x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1]) * self.domain[1][1], x1t[:, 1:2]],
+            axis=1,
+        )
         x2t = lhs_sampling(
             mins=[self.domain[1][0], self.domain[2][0]],
             maxs=[self.domain[1][1], self.domain[2][1]],
-            num=self.n_samples**2/5
+            num=self.n_samples**2 / 5,
         )
-        left = jnp.concatenate([jnp.ones_like(x2t[:, 0:1])*self.domain[0][0], x2t[:, 0:1], x2t[:, 1:2]], axis=1)
-        right = jnp.concatenate([jnp.ones_like(x2t[:, 0:1])*self.domain[0][1], x2t[:, 0:1], x2t[:, 1:2]], axis=1)
-        
+        left = jnp.concatenate(
+            [jnp.ones_like(x2t[:, 0:1]) * self.domain[0][0], x2t[:, 0:1], x2t[:, 1:2]],
+            axis=1,
+        )
+        right = jnp.concatenate(
+            [jnp.ones_like(x2t[:, 0:1]) * self.domain[0][1], x2t[:, 0:1], x2t[:, 1:2]],
+            axis=1,
+        )
+
         # local: x1 \in (self.domain[0][0]/20, self.domain[0][1]/20), x2 = self.domain[1][0], t \in (self.domain[2][0] + self.domain[2][1] / 10, self.domain[2][1])
         x1t = lhs_sampling(
-            mins=[self.domain[0][0]/20, self.domain[2][0] + self.domain[2][1] / 10],
-            maxs=[self.domain[0][1]/20, self.domain[2][1]],
-            num=self.n_samples**2/5
+            mins=[self.domain[0][0] / 20, self.domain[2][0] + self.domain[2][1] / 10],
+            maxs=[self.domain[0][1] / 20, self.domain[2][1]],
+            num=self.n_samples**2 / 5,
         )
-        local = jnp.concatenate([x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1])*self.domain[1][0], 
-                                 x1t[:, 1:2]], axis=1)
+        local = jnp.concatenate(
+            [x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1]) * self.domain[1][0], x1t[:, 1:2]],
+            axis=1,
+        )
         local_left = local.copy()
         local_right = local.copy()
         local_left = local_left.at[:, 0:1].set(local_left[:, 0:1] - 0.15)
         local_right = local_right.at[:, 0:1].set(local_right[:, 0:1] + 0.15)
         data = jnp.concatenate([top, left, right, local_left, local_right], axis=0)
         return data[:, :-1], data[:, -1:]
-    
+
     def sample_flux(self):
         x1t = lhs_sampling(
             mins=[self.domain[0][0], self.domain[2][0]],
             maxs=[self.domain[0][1], self.domain[2][1]],
-            num=self.n_samples**2/2
+            num=self.n_samples**2 / 2,
         )
-        top = jnp.concatenate([x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1])*self.domain[1][0], 
-                               x1t[:, 1:2]], axis=1)
+        top = jnp.concatenate(
+            [x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1]) * self.domain[1][0], x1t[:, 1:2]],
+            axis=1,
+        )
         return top[:, :-1], top[:, -1:]
 
     def sample(self, pde_name="ac"):
@@ -413,7 +468,13 @@ class Sampler:
         else:
             raise ValueError("Invalid PDE name")
         # data_pde = self.sample_pde()
-        return data_pde, self.sample_ic(), self.sample_bc(), data_pde, self.sample_flux()
+        return (
+            data_pde,
+            self.sample_ic(),
+            self.sample_bc(),
+            data_pde,
+            self.sample_flux(),
+        )
 
 
 def create_train_state(model, rng, lr, **kwargs):
@@ -432,8 +493,9 @@ def create_train_state(model, rng, lr, **kwargs):
 @jit
 def train_step(state, batch, eps):
     params = state.params
-    (weighted_loss, (loss_components, weight_components, aux_vars)), grads = jax.value_and_grad(
-        pinn.loss_fn, has_aux=True, argnums=0)(params, batch, eps)
+    (weighted_loss, (loss_components, weight_components, aux_vars)), grads = (
+        jax.value_and_grad(pinn.loss_fn, has_aux=True, argnums=0)(params, batch, eps)
+    )
     new_state = state.apply_gradients(grads=grads)
     return new_state, (weighted_loss, loss_components, weight_components, aux_vars)
 
@@ -446,12 +508,13 @@ pinn = PINN(
     out_dim=OUT_DIM,
     act_name=ACT_NAME,
     fourier_emb=FOURIER_EMB,
-    arch_name=ARCH_NAME
+    arch_name=ARCH_NAME,
 )
 
 
-state = create_train_state(pinn.model, model_key, LR,
-                           decay=DECAY, decay_every=DECAY_EVERY)
+state = create_train_state(
+    pinn.model, model_key, LR, decay=DECAY, decay_every=DECAY_EVERY
+)
 
 now = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 log_path = f"{LOG_DIR}/{PREFIX}/{now}"
@@ -460,11 +523,7 @@ sampler = Sampler(
     N_SAMPLES,
     domain=DOMAIN,
     key=sampler_key,
-    adaptive_kw={
-        "ratio": 2,
-        "model": pinn,
-        "params": state.params
-    }
+    adaptive_kw={"ratio": 2, "model": pinn, "params": state.params},
 )
 
 # causal_weightor_ac = CausalWeightor(num_chunks=CHUNKS, t_range=(0.0, 1.0), pinn.aux_vars)
@@ -473,63 +532,63 @@ sampler = Sampler(
 
 start_time = time.time()
 for epoch in range(EPOCHS):
-    pde_name = "ac" if (epoch % PAUSE_EVERY) < (PAUSE_EVERY // 2) else "ch"
+    pde_name = "ch" if (epoch % PAUSE_EVERY) < (PAUSE_EVERY // 2) else "ac"
     pinn.pde_name = pde_name
     pinn.causal_weightor.pde_name = pde_name
-    # pinn.causal_weightor = causal_weightor_ac if pde_name == "ac" else causal_weightor_ch
-    # pde_name = "ch" if (epoch % PAUSE_EVERY) < (PAUSE_EVERY // 2) else "ac"
-    # pinn.loss_fn_panel = [
-    #     getattr(pinn, f"loss_{pde_name}"),
-    #     pinn.loss_ic,
-    #     pinn.loss_bc,
-    #     pinn.loss_irr,
-    #     pinn.loss_flux
-    # ]
 
-    if epoch % (PAUSE_EVERY//2) == 0:
+    if epoch % (PAUSE_EVERY // 2) == 0:
         sampler.adaptive_kw["params"].update(state.params)
         batch = sampler.sample(pde_name=pde_name)
-    state, (weighted_loss, loss_components,
-            weight_components, aux_vars) = train_step(state, batch, CAUSAL_CONFIGS[pde_name + "_eps"])
+    state, (weighted_loss, loss_components, weight_components, aux_vars) = train_step(
+        state, batch, CAUSAL_CONFIGS[pde_name + "_eps"]
+    )
     update_causal_eps(aux_vars["causal_weights"], CAUSAL_CONFIGS, pde_name)
-    if epoch % (PAUSE_EVERY//2) == 0:
+    if epoch % (PAUSE_EVERY // 2) == 0:
         fig, error = evaluate2D(
-            pinn, state.params,
+            pinn,
+            state.params,
             jnp.load(f"{DATA_PATH}/mesh_points.npy"),
-            DATA_PATH, ts=TS,
-            Lc=Lc, Tc=Tc,
+            DATA_PATH,
+            ts=TS,
+            Lc=Lc,
+            Tc=Tc,
         )
 
-        print(f"Epoch: {epoch}, "
-              f"Error: {error:.2e}, "
-              f"Loss_{pde_name}: {loss_components[0]:.2e}, ")
-        metrics_tracker.register_scalars(epoch, {
-            "loss/weighted": jnp.sum(weighted_loss),
-            f"loss/{pde_name}": loss_components[0],
-            "loss/ic": loss_components[1],
-            "loss/bc": loss_components[2],
-            "loss/irr": loss_components[3],
-            "loss/flux": loss_components[4],
-            f"weight/{pde_name}": weight_components[0],
-            "weight/ic": weight_components[1],
-            "weight/bc": weight_components[2],
-            "weight/irr": weight_components[3],
-            "weight/flux": weight_components[4],
-            "error/error": error
-        })
+        print(
+            f"Epoch: {epoch}, "
+            f"Error: {error:.2e}, "
+            f"Loss_{pde_name}: {loss_components[0]:.2e}, "
+        )
+        metrics_tracker.register_scalars(
+            epoch,
+            {
+                "loss/weighted": jnp.sum(weighted_loss),
+                f"loss/{pde_name}": loss_components[0],
+                "loss/ic": loss_components[1],
+                "loss/bc": loss_components[2],
+                "loss/irr": loss_components[3],
+                "loss/flux": loss_components[4],
+                f"weight/{pde_name}": weight_components[0],
+                "weight/ic": weight_components[1],
+                "weight/bc": weight_components[2],
+                "weight/irr": weight_components[3],
+                "weight/flux": weight_components[4],
+                "error/error": error,
+            },
+        )
         metrics_tracker.register_figure(epoch, fig, "error")
         plt.close(fig)
-        
-        fig = pinn.causal_weightor.plot_causal_info(pde_name, 
-                                                    aux_vars["causal_weights"],
-                                                    aux_vars["loss_chunks"],
-                                                    CAUSAL_CONFIGS[pde_name + "_eps"])
+
+        fig = pinn.causal_weightor.plot_causal_info(
+            pde_name,
+            aux_vars["causal_weights"],
+            aux_vars["loss_chunks"],
+            CAUSAL_CONFIGS[pde_name + "_eps"],
+        )
         metrics_tracker.register_figure(epoch, fig, "causal_info")
         plt.close(fig)
-        
+
         metrics_tracker.flush()
-        
-        
 
 
 # save the model
