@@ -43,7 +43,7 @@ class PINN(nn.Module):
             self.loss_ic,
             self.loss_bc,
             self.loss_irr,
-            # self.loss_flux,
+            self.loss_flux,
         ]
         self.pde_name = "ac"
         self.aux_vars = {}
@@ -473,7 +473,7 @@ class Sampler:
             self.sample_ic(),
             self.sample_bc(),
             data_pde,
-            # self.sample_flux(),
+            self.sample_flux(),
         )
 
 
@@ -565,12 +565,12 @@ for epoch in range(EPOCHS):
                 "loss/ic": loss_components[1],
                 "loss/bc": loss_components[2],
                 "loss/irr": loss_components[3],
-                # "loss/flux": loss_components[4],
+                "loss/flux": loss_components[4],
                 f"weight/{pde_name}": weight_components[0],
                 "weight/ic": weight_components[1],
                 "weight/bc": weight_components[2],
                 "weight/irr": weight_components[3],
-                # "weight/flux": weight_components[4],
+                "weight/flux": weight_components[4],
                 "error/error": error,
             },
         )
