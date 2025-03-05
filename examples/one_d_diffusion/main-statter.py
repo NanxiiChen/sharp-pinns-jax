@@ -19,7 +19,7 @@ project_root = current_dir.parent.parent       # 向上两级到 project_working
 sys.path.append(str(project_root))             # 将根目录加入模块搜索路径
 
 from pf_pinn import *
-from example.one_d_diffusion.configs import *
+from examples.one_d_diffusion.configs import *
 
 
 class PINN(nn.Module):

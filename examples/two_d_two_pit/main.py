@@ -16,7 +16,7 @@ project_root = current_dir.parent.parent  # 向上两级到 project_working_dir
 sys.path.append(str(project_root))  # 将根目录加入模块搜索路径
 
 from pf_pinn import *
-from example.two_d_two_pit.configs import Config as cfg
+from examples.two_d_two_pit.configs import Config as cfg
 
 
 # from jax import config
