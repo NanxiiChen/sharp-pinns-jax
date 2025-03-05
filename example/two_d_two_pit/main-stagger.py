@@ -43,7 +43,7 @@ class PINN(nn.Module):
             self.loss_ic,
             self.loss_bc,
             self.loss_irr,
-            self.loss_flux,
+            # self.loss_flux,
         ]
         self.pde_name = "ac"
         self.aux_vars = {}
@@ -209,7 +209,7 @@ class PINN(nn.Module):
     @partial(jit, static_argnums=(0,))
     def net_speed(self, params, x, t):
         jac_dt = jax.jacrev(self.net_u, argnums=2)
-        dphi_dt, dc_dt = jac_dt(params, x, t) * Tc
+        dphi_dt, dc_dt = jac_dt(params, x, t)
         return dphi_dt, dc_dt
 
     @partial(jit, static_argnums=(0,))
@@ -473,7 +473,7 @@ class Sampler:
             self.sample_ic(),
             self.sample_bc(),
             data_pde,
-            self.sample_flux(),
+            # self.sample_flux(),
         )
 
 
@@ -526,8 +526,6 @@ sampler = Sampler(
     adaptive_kw={"ratio": 2, "model": pinn, "params": state.params},
 )
 
-# causal_weightor_ac = CausalWeightor(num_chunks=CHUNKS, t_range=(0.0, 1.0), pinn.aux_vars)
-# causal_weightor_ch = CausalWeightor(num_chunks=CHUNKS, t_range=(0.0, 1.0))
 
 
 start_time = time.time()
@@ -567,12 +565,12 @@ for epoch in range(EPOCHS):
                 "loss/ic": loss_components[1],
                 "loss/bc": loss_components[2],
                 "loss/irr": loss_components[3],
-                "loss/flux": loss_components[4],
+                # "loss/flux": loss_components[4],
                 f"weight/{pde_name}": weight_components[0],
                 "weight/ic": weight_components[1],
                 "weight/bc": weight_components[2],
                 "weight/irr": weight_components[3],
-                "weight/flux": weight_components[4],
+                # "weight/flux": weight_components[4],
                 "error/error": error,
             },
         )

@@ -1,11 +1,9 @@
-import jax.numpy as jnp
-
 EPOCHS = 100000
-N_SAMPLES = 25
+N_SAMPLES = 30
 LR = 5e-4
 DECAY = 0.9
 DECAY_EVERY = 200
-PAUSE_EVERY = 20
+PAUSE_EVERY = 50
 
 
 DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 1]]
@@ -45,7 +43,7 @@ CAUSAL_CONFIGS = {
     "ac_eps": 1e-5,
     "ch_eps": 1e-5,
     "step_size": 10,
-    "max_last_weight": 0.99,
-    "min_mean_weight": 0.5,
-    "max_eps": 1e2,
+    "max_last_weight": 0.80,
+    "min_mean_weight": 0.3,
+    "max_eps": 1e0,
 }
