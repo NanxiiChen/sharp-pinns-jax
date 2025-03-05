@@ -22,7 +22,7 @@ This framework features a novel staggered training scheme and an enhanced neural
 
 ## Citation
 
-```
+```bibtex
 @misc{chen2025sharppinnsstaggeredhardconstrainedphysicsinformed,
       title={Sharp-PINNs: staggered hard-constrained physics-informed neural networks for phase field modelling of corrosion}, 
       author={Nanxi Chen and Chuanjie Cui and Rujin Ma and Airong Chen and Sifan Wang},
