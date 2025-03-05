@@ -341,6 +341,7 @@ class Sampler:
         self.key = key
         self.mins = [d[0] for d in domain]
         self.maxs = [d[1] for d in domain]
+        
 
     def adaptive_sampling(self, residual_fn):
         adaptive_base = lhs_sampling(
@@ -525,23 +526,24 @@ sampler = Sampler(
     key=sampler_key,
     adaptive_kw={"ratio": 2, "model": pinn, "params": state.params},
 )
-
-
+stagger = StaggerSwitch()
 
 start_time = time.time()
 for epoch in range(EPOCHS):
-    pde_name = "ch" if (epoch % PAUSE_EVERY) < (PAUSE_EVERY // 2) else "ac"
+    pde_name = stagger.switch(epoch, STAGGER_PERIOD)
     pinn.pde_name = pde_name
     pinn.causal_weightor.pde_name = pde_name
 
-    if epoch % (PAUSE_EVERY // 2) == 0:
+    if epoch % STAGGER_PERIOD == 0:
         sampler.adaptive_kw["params"].update(state.params)
         batch = sampler.sample(pde_name=pde_name)
+        
     state, (weighted_loss, loss_components, weight_components, aux_vars) = train_step(
         state, batch, CAUSAL_CONFIGS[pde_name + "_eps"]
     )
     update_causal_eps(aux_vars["causal_weights"], CAUSAL_CONFIGS, pde_name)
-    if epoch % (PAUSE_EVERY // 2) == 0:
+    
+    if epoch % STAGGER_PERIOD == 0:
         fig, error = evaluate2D(
             pinn,
             state.params,
@@ -557,22 +559,24 @@ for epoch in range(EPOCHS):
             f"Error: {error:.2e}, "
             f"Loss_{pde_name}: {loss_components[0]:.2e}, "
         )
+        
         metrics_tracker.register_scalars(
             epoch,
-            {
-                "loss/weighted": jnp.sum(weighted_loss),
-                f"loss/{pde_name}": loss_components[0],
-                "loss/ic": loss_components[1],
-                "loss/bc": loss_components[2],
-                "loss/irr": loss_components[3],
-                "loss/flux": loss_components[4],
-                f"weight/{pde_name}": weight_components[0],
-                "weight/ic": weight_components[1],
-                "weight/bc": weight_components[2],
-                "weight/irr": weight_components[3],
-                "weight/flux": weight_components[4],
-                "error/error": error,
-            },
+            names=[
+                "loss/weighted",
+                f"loss/{pde_name}",
+                "loss/ic",
+                "loss/bc",
+                "loss/irr",
+                "loss/flux",
+                f"weight/{pde_name}",
+                "weight/ic",
+                "weight/bc",
+                "weight/irr",
+                "weight/flux",
+                "error/error",
+            ],
+            values=[weighted_loss, *loss_components, *weight_components, error],
         )
         metrics_tracker.register_figure(epoch, fig, "error")
         plt.close(fig)
