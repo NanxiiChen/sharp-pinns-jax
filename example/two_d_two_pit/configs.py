@@ -1,10 +1,12 @@
 class Config:
     EPOCHS = 100000
-    N_SAMPLES = 30
+    N_SAMPLES = 25
+    ADAPTIVE_SAMPLES = 4000
+    ADAPTIVE_BASE_RATE = 10
     LR = 5e-4
     DECAY = 0.9
     DECAY_EVERY = 200
-    STAGGER_PERIOD = 50
+    STAGGER_PERIOD = 25
 
 
     DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 1]]
@@ -14,7 +16,7 @@ class Config:
     TS = [0.000, 2.273, 4.803, 9.528]
 
     NUM_LAYERS = 6
-    HIDDEN_DIM = 128
+    HIDDEN_DIM = 200
     OUT_DIM = 2
 
 
@@ -40,11 +42,11 @@ class Config:
 
 
     CAUSAL_CONFIGS = {
-        "ac_eps": 1e-5,
-        "ch_eps": 1e-5,
-        "step_size": 5,
-        "max_last_weight": 0.90,
-        "min_mean_weight": 0.3,
+        "ac_eps": 1e-4,
+        "ch_eps": 1e-4,
+        "step_size": 10,
+        "max_last_weight": 0.99,
+        "min_mean_weight": 0.5,
         "max_eps": 1e0,
         "chunks": 20,
     }

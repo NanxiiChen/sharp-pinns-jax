@@ -1,7 +1,6 @@
 
 from typing import Callable
 
-import jax
 import jax.numpy as jnp
 from flax import linen as nn
 from jax.nn.initializers import glorot_normal, normal, zeros
@@ -94,7 +93,7 @@ class ModifiedMLP(nn.Module):
 
         if self.fourier_emb:
             # separate the spatial and temporal coordinates
-            t_emb = FourierEmbedding(emb_scale=2.0/5)(t)
+            t_emb = FourierEmbedding(emb_scale=0.5)(t)
             x_emb = FourierEmbedding(emb_scale=2.0)(x)
             x = jnp.concatenate([x_emb, t_emb], axis=-1)
         else:

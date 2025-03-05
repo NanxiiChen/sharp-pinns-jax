@@ -3,16 +3,13 @@ import sys
 import time
 from functools import partial
 from pathlib import Path
-from typing import Callable
 
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import optax
-from flax import linen as nn
 from flax.training import train_state
 from jax import jit, random, vmap
-from jax.flatten_util import ravel_pytree
 
 current_dir = Path(__file__).resolve().parent  # 当前文件所在目录 (example1)
 project_root = current_dir.parent.parent  # 向上两级到 project_working_dir
@@ -21,7 +18,6 @@ sys.path.append(str(project_root))  # 将根目录加入模块搜索路径
 from pf_pinn import *
 from example.two_d_two_pit.configs import Config as cfg
 
-        
 
 # from jax import config
 # config.update("jax_disable_jit", True)
@@ -36,6 +32,7 @@ class Sampler:
         key=random.PRNGKey(0),
         adaptive_kw={
             "ratio": 10,
+            "num": 5000,
             "model": None,
             "state": None,
         },
@@ -46,15 +43,14 @@ class Sampler:
         self.key = key
         self.mins = [d[0] for d in domain]
         self.maxs = [d[1] for d in domain]
-        
 
     def adaptive_sampling(self, residual_fn):
         adaptive_base = lhs_sampling(
-            self.mins, self.maxs, self.n_samples**3 * self.adaptive_kw["ratio"]
+            self.mins, self.maxs, self.adaptive_kw["num"] * self.adaptive_kw["ratio"]
         )
         residuals = residual_fn(adaptive_base)
         max_residuals, indices = jax.lax.top_k(
-            jnp.abs(residuals), self.n_samples**3 // 5
+            jnp.abs(residuals), self.adaptive_kw["num"]
         )
         return adaptive_base[indices]
 
@@ -63,7 +59,7 @@ class Sampler:
         data = shfted_grid(
             self.mins,
             self.maxs,
-            [self.n_samples*2, self.n_samples, self.n_samples * 3],
+            [self.n_samples, self.n_samples, self.n_samples * 3],
             self.key,
         )
         return data[:, :-1], data[:, -1:]
@@ -229,7 +225,10 @@ class PFPINN(PINN):
             - (
                 1
                 - jnp.tanh(
-                    jnp.sqrt(cfg.OMEGA_PHI) / jnp.sqrt(2 * cfg.ALPHA_PHI) * (r - 0.05) * cfg.Lc
+                    jnp.sqrt(cfg.OMEGA_PHI)
+                    / jnp.sqrt(2 * cfg.ALPHA_PHI)
+                    * (r - 0.05)
+                    * cfg.Lc
                 )
             )
             / 2
@@ -238,6 +237,7 @@ class PFPINN(PINN):
         c = h_phi * cfg.CSE + (1 - h_phi) * 0.0
         sol = jnp.stack([phi, c], axis=1)
         return jax.lax.stop_gradient(sol)
+
 
 pinn = PFPINN(
     num_layers=cfg.NUM_LAYERS,
@@ -261,7 +261,12 @@ sampler = Sampler(
     cfg.N_SAMPLES,
     domain=cfg.DOMAIN,
     key=sampler_key,
-    adaptive_kw={"ratio": 2, "model": pinn, "params": state.params},
+    adaptive_kw={
+        "ratio": cfg.ADAPTIVE_BASE_RATE,
+        "model": pinn,
+        "params": state.params,
+        "num": cfg.ADAPTIVE_SAMPLES,
+    },
 )
 stagger = StaggerSwitch()
 
@@ -274,12 +279,12 @@ for epoch in range(cfg.EPOCHS):
     if epoch % cfg.STAGGER_PERIOD == 0:
         sampler.adaptive_kw["params"].update(state.params)
         batch = sampler.sample(pde_name=pde_name)
-        
+
     state, (weighted_loss, loss_components, weight_components, aux_vars) = train_step(
         state, batch, cfg.CAUSAL_CONFIGS[pde_name + "_eps"]
     )
     update_causal_eps(aux_vars["causal_weights"], cfg.CAUSAL_CONFIGS, pde_name)
-    
+
     if epoch % cfg.STAGGER_PERIOD == 0:
         fig, error = evaluate2D(
             pinn,
@@ -296,7 +301,7 @@ for epoch in range(cfg.EPOCHS):
             f"Error: {error:.2e}, "
             f"Loss_{pde_name}: {loss_components[0]:.2e}, "
         )
-        
+
         metrics_tracker.register_scalars(
             epoch,
             names=[
