@@ -1,7 +1,6 @@
 
 from typing import Callable
 
-import jax
 import jax.numpy as jnp
 from flax import linen as nn
 from jax.nn.initializers import glorot_normal, normal, zeros
@@ -26,14 +25,29 @@ class Dense(nn.Module):
 
 class FourierEmbedding(nn.Module):
     emb_scale: float = 2.0
-    emb_dim: int = 64
+    emb_dim: int = 32
 
     @nn.compact
     def __call__(self, x):
         kernel = self.param('kernel', normal(self.emb_scale),
                             (x.shape[-1], self.emb_dim))
-        return jnp.concatenate([jnp.sin(jnp.pi * jnp.dot(x, kernel)),
-                                jnp.cos(jnp.pi * jnp.dot(x, kernel))], axis=-1)
+        return jnp.concatenate([jnp.sin(jnp.pi*jnp.dot(x, kernel)),
+                                jnp.cos(jnp.pi*jnp.dot(x, kernel))], axis=-1)
+        
+# class ExponentialEmbedding(nn.Module):
+#     emb_scale: tuple = (1/2, 3/2)
+#     emb_dim: int = 32
+    
+#     @nn.compact
+#     def __call__(self, x):
+#         low, high = self.emb_scale
+#         # the initial kernel is a linspace from low to high
+#         kernel = jnp.linspace(low, high, self.emb_dim)
+
+
+#         return jnp.dot(x, jnp.ones((x.shape[-1], self.emb_dim))) ** kernel
+        
+    
 
 
 class MLP(nn.Module):
@@ -51,8 +65,8 @@ class MLP(nn.Module):
 
         if self.fourier_emb:
             # separate the spatial and temporal coordinates
-            t_emb = FourierEmbedding()(t)
-            x_emb = FourierEmbedding()(x)
+            t_emb = FourierEmbedding(emb_scale=1.0)(t)
+            x_emb = FourierEmbedding(emb_scale=2.0)(x)
             x = jnp.concatenate([x_emb, t_emb], axis=-1)
         else:
             x = jnp.concatenate([x, t], axis=-1)
@@ -76,10 +90,11 @@ class ModifiedMLP(nn.Module):
 
     @nn.compact
     def __call__(self, x, t):
+
         if self.fourier_emb:
             # separate the spatial and temporal coordinates
-            t_emb = FourierEmbedding()(t)
-            x_emb = FourierEmbedding()(x)
+            t_emb = FourierEmbedding(emb_scale=0.5)(t)
+            x_emb = FourierEmbedding(emb_scale=2.0)(x)
             x = jnp.concatenate([x_emb, t_emb], axis=-1)
         else:
             x = jnp.concatenate([x, t], axis=-1)
@@ -91,7 +106,7 @@ class ModifiedMLP(nn.Module):
 
         for _ in range(self.num_layers):
             x = Dense(x.shape[-1], self.hidden_dim)(x)
-            x = self.act_fn(x)
+            x = nn.tanh(x)
             x = x * u + (1 - x) * v
 
         return Dense(self.hidden_dim, self.out_dim)(x)

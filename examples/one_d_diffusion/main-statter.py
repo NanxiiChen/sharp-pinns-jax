@@ -19,7 +19,7 @@ project_root = current_dir.parent.parent       # 向上两级到 project_working
 sys.path.append(str(project_root))             # 将根目录加入模块搜索路径
 
 from pf_pinn import *
-from example.one_d_diffusion.configs import *
+from examples.one_d_diffusion.configs import *
 
 
 class PINN(nn.Module):
@@ -38,7 +38,8 @@ class PINN(nn.Module):
         # u(x<0, t) = [1, 1], u(x>0, t) = [0, 0]
         phi = jnp.where(x < 0, 1, 0)
         c = jnp.where(x < 0, 1, 0)
-        return jnp.stack([phi, c], axis=0)
+        sol = jnp.stack([phi, c], axis=0)
+        return jax.lax.stop_gradient(sol)
 
     @partial(jit, static_argnums=(0,))
     def ref_sol_ic(self, x, t):
@@ -46,7 +47,8 @@ class PINN(nn.Module):
                             jnp.sqrt(2 * ALPHA_PHI) * (x-0.4) * Lc)) / 2
         h_phi = -2 * phi**3 + 3 * phi**2
         c = h_phi * CSE + (1 - h_phi) * 0.0
-        return jnp.stack([phi, c], axis=0)
+        sol = jnp.stack([phi, c], axis=0)
+        return jax.lax.stop_gradient(sol)
 
     def grad(self, func: Callable, argnums: int):
         return jax.grad(lambda *args, **kwargs: func(*args, **kwargs).sum(), argnums=argnums)
@@ -107,14 +109,14 @@ class PINN(nn.Module):
         dh_dphi = -6 * phi**2 + 6 * phi
         dg_dphi = 4 * phi**3 - 6 * phi**2 + 2 * phi
 
-        jac = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0],
+        jac_phi_t = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0],
                          argnums=1)
-        dphi_dt = jac(x, t)
+        dphi_dt = jac_phi_t(x, t)
 
-        hess = jax.hessian(lambda x, t: self.net_u(params, x, t)[0],
+        hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0],
                            argnums=0)
-        d2phi_dx2 = hess(x, t)
-        nabla2phi = d2phi_dx2
+        nabla2phi = jnp.linalg.trace(hess_phi_x(x, t))
+        
 
         ac = dphi_dt - AC1 * (c - h_phi*(CSE-CLE) - CLE) * (CSE-CLE) * dh_dphi \
             + AC2 * dg_dphi - AC3 * nabla2phi
@@ -127,24 +129,37 @@ class PINN(nn.Module):
         # self.net_u : (x, t) --> (phi, c)
         phi, c = self.net_u(params, x, t)
 
-        jac = jax.jacrev(self.net_u, argnums=(1, 2))
-        dphi_dx, dc_dx = jac(params, x, t)[0]
-        dphi_dt, dc_dt = jac(params, x, t)[1]
+        # jac = jax.jacrev(self.net_u, argnums=(1, 2))
+        # dphi_dx, dc_dx = jac(params, x, t)[0]
+        # dphi_dt, dc_dt = jac(params, x, t)[1]
+        
+        jac_phi_x = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0],
+                                 argnums=0)
+        dphi_dx = jac_phi_x(x, t)
+        
+        jac_c_t = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1],
+                             argnums=1)
+        dc_dt = jac_c_t(x, t)
 
-        hess = jax.hessian(self.net_u, argnums=(1))
-        d2phi_dx2, d2c_dx2 = hess(params, x, t)
+        # hess = jax.hessian(self.net_u, argnums=(1))
+        # hess_phi_x, hess_c_x = hess(params, x, t)
+        hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0],
+                                    argnums=0)(x, t)
+        hess_c_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[1],
+                                argnums=0)(x, t)
 
-        nabla2phi = d2phi_dx2
-        nabla2c = d2c_dx2
+        nabla2phi = jnp.linalg.trace(hess_phi_x)
+        nabla2c = jnp.linalg.trace(hess_c_x)
 
         nabla2_hphi = 6 * (
             phi * (1 - phi) * nabla2phi
-            + (1 - 2*phi) * dphi_dx**2
+            + (1 - 2*phi) * jnp.sum(dphi_dx**2)
         )
 
         ch = dc_dt - CH1 * nabla2c + CH1 * (CSE - CLE) * nabla2_hphi
 
         return ch.squeeze() / CH_PRE_SCALE
+
 
     @partial(jit, static_argnums=(0,))
     def loss_ac(self, params, batch):
@@ -232,6 +247,8 @@ class Sampler:
 
     def sample_pde(self):
         data = lhs_sampling(self.mins, self.maxs, self.n_samples**2)
+        # self.key, subkey = random.split(self.key)
+        # data = shfted_grid(self.mins, self.maxs, [self.n_samples, self.n_samples], subkey)
         return data[:, :-1], data[:, -1:]
 
     def sample_ac(self):
@@ -239,7 +256,7 @@ class Sampler:
 
         def residual_fn(batch):
             model = self.adaptive_kw["model"]
-            params = self.adaptive_kw["state"].params
+            params = self.adaptive_kw["params"]
             x, t = batch[:, :-1], batch[:, -1:]
             return vmap(model.net_ac, in_axes=(None, 0, 0))(params, x, t)
 
@@ -252,7 +269,7 @@ class Sampler:
 
         def residual_fn(batch):
             model = self.adaptive_kw["model"]
-            params = self.adaptive_kw["state"].params
+            params = self.adaptive_kw["params"]
             x, t = batch[:, :-1], batch[:, -1:]
             return vmap(model.net_ch, in_axes=(None, 0, 0))(params, x, t)
 
@@ -279,13 +296,13 @@ class Sampler:
         return mesh_flat(x, t)
 
     def sample(self, pde_name="ac"):
-        # if pde_name == "ac":
-        #     return self.sample_ac(), self.sample_ic(), self.sample_bc()
-        # elif pde_name == "ch":
-        #     return self.sample_ch(), self.sample_ic(), self.sample_bc()
-        # else:
-        #     raise ValueError("Invalid PDE name")
-        return self.sample_pde(), self.sample_ic(), self.sample_bc()
+        if pde_name == "ac":
+            return self.sample_ac(), self.sample_ic(), self.sample_bc()
+        elif pde_name == "ch":
+            return self.sample_ch(), self.sample_ic(), self.sample_bc()
+        else:
+            raise ValueError("Invalid PDE name")
+        # return self.sample_pde(), self.sample_ic(), self.sample_bc()
 
 
 def create_train_state(model, rng, lr, **kwargs):
@@ -335,7 +352,7 @@ sampler = Sampler(
     adaptive_kw={
         "ratio": 10,
         "model": pinn,
-        "state": state
+        "params": state.params,
     }
 )
 
@@ -357,6 +374,7 @@ for epoch in range(EPOCHS):
     ]
 
     if epoch % (PAUSE_EVERY//2) == 0:
+        sampler.adaptive_kw["params"].update(state.params)
         batch = sampler.sample(pde_name=pde_name)
     state, (weighted_loss, loss_components,
             weight_components) = train_step(state, batch)
