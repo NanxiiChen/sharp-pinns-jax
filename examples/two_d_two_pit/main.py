@@ -174,7 +174,7 @@ class Sampler:
             data_pde,
             self.sample_ic(),
             self.sample_bc(),
-            data_pde,
+            self.sample_pde(),
             self.sample_flux(),
         )
 
@@ -268,11 +268,11 @@ sampler = Sampler(
         "num": cfg.ADAPTIVE_SAMPLES,
     },
 )
-stagger = StaggerSwitch()
+stagger = StaggerSwitch(pde_names=["ac", "ch"], stagger_period=cfg.STAGGER_PERIOD)
 
 start_time = time.time()
 for epoch in range(cfg.EPOCHS):
-    pde_name = stagger.switch(epoch, cfg.STAGGER_PERIOD)
+    pde_name = stagger.decide_pde()
     pinn.pde_name = pde_name
     pinn.causal_weightor.pde_name = pde_name
 
@@ -280,10 +280,15 @@ for epoch in range(cfg.EPOCHS):
         sampler.adaptive_kw["params"].update(state.params)
         batch = sampler.sample(pde_name=pde_name)
 
+
     state, (weighted_loss, loss_components, weight_components, aux_vars) = train_step(
         state, batch, cfg.CAUSAL_CONFIGS[pde_name + "_eps"]
     )
-    update_causal_eps(aux_vars["causal_weights"], cfg.CAUSAL_CONFIGS, pde_name)
+    if cfg.CAUSAL_WEIGHT:
+        update_causal_eps(aux_vars["causal_weights"], cfg.CAUSAL_CONFIGS, pde_name) 
+    stagger.step_epoch()
+
+
 
     if epoch % cfg.STAGGER_PERIOD == 0:
         fig, error = evaluate2D(
@@ -323,16 +328,19 @@ for epoch in range(cfg.EPOCHS):
         metrics_tracker.register_figure(epoch, fig, "error")
         plt.close(fig)
 
-        fig = pinn.causal_weightor.plot_causal_info(
-            pde_name,
-            aux_vars["causal_weights"],
-            aux_vars["loss_chunks"],
-            cfg.CAUSAL_CONFIGS[pde_name + "_eps"],
-        )
-        metrics_tracker.register_figure(epoch, fig, "causal_info")
-        plt.close(fig)
+        if cfg.CAUSAL_WEIGHT:
+            fig = pinn.causal_weightor.plot_causal_info(
+                pde_name,
+                aux_vars["causal_weights"],
+                aux_vars["loss_chunks"],
+                cfg.CAUSAL_CONFIGS[pde_name + "_eps"],
+            )
+            metrics_tracker.register_figure(epoch, fig, "causal_info")
+            plt.close(fig)
 
         metrics_tracker.flush()
+        
+    
 
 
 # save the model

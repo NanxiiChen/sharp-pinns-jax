@@ -101,42 +101,6 @@ class PINN(nn.Module):
         # return hard_cons(params, x, t)
 
     @partial(jit, static_argnums=(0,))
-    def net_pde(self, params, x, t):
-        AC1 = 2 * self.cfg.AA * self.cfg.LP * self.cfg.Tc
-        AC2 = self.cfg.LP * self.cfg.OMEGA_PHI * self.cfg.Tc
-        AC3 = self.cfg.LP * self.cfg.ALPHA_PHI * self.cfg.Tc / self.cfg.Lc**2
-        CH1 = 2 * self.cfg.AA * self.cfg.MM * self.cfg.Tc / self.cfg.Lc**2
-
-        # self.net_u : (x, t) --> (phi, c)
-        phi, c = self.net_u(params, x, t)
-        h_phi = -2 * phi**3 + 3 * phi**2
-        dh_dphi = -6 * phi**2 + 6 * phi
-        g_phi = phi**2 * (1 - phi) ** 2
-        dg_dphi = 4 * phi**3 - 6 * phi**2 + 2 * phi
-
-        jac = jax.jacrev(self.net_u, argnums=(1, 2))
-        dphi_dx, dc_dx = jac(params, x, t)[0]
-        dphi_dt, dc_dt = jac(params, x, t)[1]
-
-        hess = jax.hessian(self.net_u, argnums=(1))
-        d2phi_dx2, d2c_dx2 = hess(params, x, t)
-
-        nabla2phi = d2phi_dx2
-        nabla2c = d2c_dx2
-
-        nabla2_hphi = 6 * (phi * (1 - phi) * nabla2phi + (1 - 2 * phi) * dphi_dx**2)
-
-        ch = dc_dt - CH1 * nabla2c + CH1 * (self.cfg.CSE - self.cfg.CLE) * nabla2_hphi
-        ac = (
-            dphi_dt
-            - AC1 * (c - h_phi * (self.cfg.CSE - self.cfg.CLE) - self.cfg.CLE) * (self.cfg.CSE - self.cfg.CLE) * dh_dphi
-            + AC2 * dg_dphi
-            - AC3 * nabla2phi
-        )
-
-        return [ac / self.cfg.AC_PRE_SCALE, ch / self.cfg.CH_PRE_SCALE]
-
-    @partial(jit, static_argnums=(0,))
     def net_ac(self, params, x, t):
         AC1 = 2 * self.cfg.AA * self.cfg.LP * self.cfg.Tc
         AC2 = self.cfg.LP * self.cfg.OMEGA_PHI * self.cfg.Tc
@@ -181,12 +145,13 @@ class PINN(nn.Module):
 
         # hess = jax.hessian(self.net_u, argnums=(1))
         # hess_phi_x, hess_c_x = hess(params, x, t)
-        hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0], argnums=0)(
-            x, t
-        )
-        hess_c_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(
-            x, t
-        )
+        # hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0], argnums=0)(
+        #     x, t
+        # )
+        # hess_c_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(
+        #     x, t
+        # )
+        hess_phi_x, hess_c_x = jax.hessian(self.net_u, argnums=(1))(params, x, t)
 
         nabla2phi = jnp.linalg.trace(hess_phi_x)
         nabla2c = jnp.linalg.trace(hess_c_x)
@@ -237,7 +202,7 @@ class PINN(nn.Module):
         pde_fn = self.net_ac if pde_name == "ac" else self.net_ch
         res = vmap(pde_fn, in_axes=(None, 0, 0))(params, x, t)
         if not self.cfg.CAUSAL_WEIGHT:
-            return jnp.mean(res**2)
+            return jnp.mean(res**2), {}
         else:
             return self.causal_weightor.compute_causal_loss(res, t, eps)
 
@@ -258,7 +223,7 @@ class PINN(nn.Module):
         x, t = batch
         dphi_dt, dc_dt = vmap(self.net_speed, in_axes=(None, 0, 0))(params, x, t)
         # dphi_dt must be negative, use relu to ensure it
-        return jnp.mean(jax.nn.relu(dphi_dt)) + jnp.mean(jax.nn.relu(dc_dt))
+        return jnp.mean(jax.nn.relu(dphi_dt)**2) + jnp.mean(jax.nn.relu(dc_dt)**2)
 
     @partial(jit, static_argnums=(0,))
     def loss_flux(self, params, batch):

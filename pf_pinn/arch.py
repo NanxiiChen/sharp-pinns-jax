@@ -25,7 +25,7 @@ class Dense(nn.Module):
 
 class FourierEmbedding(nn.Module):
     emb_scale: float = 2.0
-    emb_dim: int = 32
+    emb_dim: int = 64
 
     @nn.compact
     def __call__(self, x):
@@ -93,8 +93,8 @@ class ModifiedMLP(nn.Module):
 
         if self.fourier_emb:
             # separate the spatial and temporal coordinates
-            t_emb = FourierEmbedding(emb_scale=0.5)(t)
-            x_emb = FourierEmbedding(emb_scale=2.0)(x)
+            t_emb = FourierEmbedding(emb_scale=0.4)(t)
+            x_emb = FourierEmbedding(emb_scale=1.5)(x)
             x = jnp.concatenate([x_emb, t_emb], axis=-1)
         else:
             x = jnp.concatenate([x, t], axis=-1)

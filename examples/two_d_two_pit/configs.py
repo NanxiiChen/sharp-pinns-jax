@@ -6,14 +6,13 @@ class Config:
     LR = 5e-4
     DECAY = 0.9
     DECAY_EVERY = 200
-    STAGGER_PERIOD = 25
-
+    STAGGER_PERIOD = 50
 
     DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 1]]
     DATA_PATH = "./data/2d-2pits/"
     LOG_DIR = "/root/tf-logs"
     PREFIX = "2d-2pits"
-    TS = [0.000, 2.273, 4.803, 9.528]
+    TS = [0.000, 2.655, 4.881, 9.984]
 
     NUM_LAYERS = 6
     HIDDEN_DIM = 200
@@ -42,8 +41,8 @@ class Config:
 
 
     CAUSAL_CONFIGS = {
-        "ac_eps": 1e-4,
-        "ch_eps": 1e-4,
+        "ac_eps": 1e-5,
+        "ch_eps": 1e-5,
         "step_size": 10,
         "max_last_weight": 0.99,
         "min_mean_weight": 0.5,
