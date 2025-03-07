@@ -17,16 +17,10 @@ class PINN(nn.Module):
 
     def __init__(
         self,
-        num_layers,
-        hidden_dim,
-        out_dim,
-        act_name,
-        fourier_emb=True,
-        arch_name="mlp",
-        config : object = None,
+        config: object = None,
     ):
         super().__init__()
-        
+
         self.cfg = config
 
         self.loss_fn_panel = [
@@ -39,47 +33,27 @@ class PINN(nn.Module):
         self.pde_name = "ac"
         self.aux_vars = {}
         self.causal_weightor = CausalWeightor(
-            num_chunks=self.cfg.CAUSAL_CONFIGS["chunks"], t_range=(0.0, 1.0), pde_name="ac"
+            num_chunks=self.cfg.CAUSAL_CONFIGS["chunks"],
+            t_range=(0.0, 1.0),
         )
         arch = {"mlp": MLP, "modified_mlp": ModifiedMLP}
-        self.model = arch[arch_name](
-            act_name=act_name,
-            num_layers=num_layers,
-            hidden_dim=hidden_dim,
-            out_dim=out_dim,
-            fourier_emb=fourier_emb,
+        self.model = arch[self.cfg.ARCH_NAME](
+            act_name=self.cfg.ACT_NAME,
+            num_layers=self.cfg.NUM_LAYERS,
+            hidden_dim=self.cfg.HIDDEN_DIM,
+            out_dim=self.cfg.OUT_DIM,
+            fourier_emb=self.cfg.FOURIER_EMB,
+            emb_scale=self.cfg.EMB_SCALE,
+            emb_dim=self.cfg.EMB_DIM
         )
 
     @partial(jit, static_argnums=(0,))
     def ref_sol_bc(self, x, t):
         raise NotImplementedError
-        # # x: (x1, x2)
-        # r = jnp.sqrt((jnp.abs(x[:, 0]) - 0.15) ** 2 + x[:, 1] ** 2)
-        # # phi = jnp.where(r < 0.05**2, 0, 1)
-        # # c = jnp.where(r < 0.05**2, 0, 1)
-        # phi = (r > 0.05).astype(jnp.float32)
-        # c = phi.copy()
-        # sol = jnp.stack([phi, c], axis=1)
-        # return jax.lax.stop_gradient(sol)
 
     @partial(jit, static_argnums=(0,))
     def ref_sol_ic(self, x, t):
         raise NotImplementedError
-    #     r = jnp.sqrt((jnp.abs(x[:, 0]) - 0.15) ** 2 + x[:, 1] ** 2)
-    #     phi = (
-    #         1
-    #         - (
-    #             1
-    #             - jnp.tanh(
-    #                 jnp.sqrt(OMEGA_PHI) / jnp.sqrt(2 * ALPHA_PHI) * (r - 0.05) * Lc
-    #             )
-    #         )
-    #         / 2
-    #     )
-    #     h_phi = -2 * phi**3 + 3 * phi**2
-    #     c = h_phi * CSE + (1 - h_phi) * 0.0
-    #     sol = jnp.stack([phi, c], axis=1)
-    #     return jax.lax.stop_gradient(sol)
 
     def grad(self, func: Callable, argnums: int):
         return jax.grad(
@@ -88,11 +62,10 @@ class PINN(nn.Module):
 
     @partial(jit, static_argnums=(0,))
     def net_u(self, params, x, t):
-
         def hard_cons(params, x, t):
             phi, cl = nn.tanh(self.model.apply(params, x, t)) / 2 + 0.5
             cl = cl * (1 - self.cfg.CSE + self.cfg.CLE)
-            c = (self.cfg.CSE -self.cfg.CLE) * (-2 * phi**3 + 3 * phi**2) + cl
+            c = (self.cfg.CSE - self.cfg.CLE) * (-2 * phi**3 + 3 * phi**2) + cl
             return jnp.stack([phi, c], axis=0)
 
         return (
@@ -120,7 +93,10 @@ class PINN(nn.Module):
 
         ac = (
             dphi_dt
-            - AC1 * (c - h_phi * (self.cfg.CSE - self.cfg.CLE) - self.cfg.CLE) * (self.cfg.CSE - self.cfg.CLE) * dh_dphi
+            - AC1
+            * (c - h_phi * (self.cfg.CSE - self.cfg.CLE) - self.cfg.CLE)
+            * (self.cfg.CSE - self.cfg.CLE)
+            * dh_dphi
             + AC2 * dg_dphi
             - AC3 * nabla2phi
         )
@@ -133,24 +109,12 @@ class PINN(nn.Module):
         # self.net_u : (x, t) --> (phi, c)
         phi, c = self.net_u(params, x, t)
 
-        # jac = jax.jacrev(self.net_u, argnums=(1, 2))
-        # dphi_dx, dc_dx = jac(params, x, t)[0]
-        # dphi_dt, dc_dt = jac(params, x, t)[1]
-
         jac_phi_x = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0], argnums=0)
         dphi_dx = jac_phi_x(x, t)
 
         jac_c_t = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1], argnums=1)
         dc_dt = jac_c_t(x, t)
 
-        # hess = jax.hessian(self.net_u, argnums=(1))
-        # hess_phi_x, hess_c_x = hess(params, x, t)
-        # hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0], argnums=0)(
-        #     x, t
-        # )
-        # hess_c_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(
-        #     x, t
-        # )
         hess_phi_x, hess_c_x = jax.hessian(self.net_u, argnums=(1))(params, x, t)
 
         nabla2phi = jnp.linalg.trace(hess_phi_x)
@@ -223,7 +187,7 @@ class PINN(nn.Module):
         x, t = batch
         dphi_dt, dc_dt = vmap(self.net_speed, in_axes=(None, 0, 0))(params, x, t)
         # dphi_dt must be negative, use relu to ensure it
-        return jnp.mean(jax.nn.relu(dphi_dt)**2) + jnp.mean(jax.nn.relu(dc_dt)**2)
+        return jnp.mean(jax.nn.relu(dphi_dt) ** 2) + jnp.mean(jax.nn.relu(dc_dt) ** 2)
 
     @partial(jit, static_argnums=(0,))
     def loss_flux(self, params, batch):

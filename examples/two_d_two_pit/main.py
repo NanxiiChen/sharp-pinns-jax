@@ -104,12 +104,8 @@ class Sampler:
         return x, t
 
     def sample_bc(self):
-        self.key, subkey = random.split(self.key)
-        # t = random.uniform(subkey, (self.n_samples,),
-        #                    minval=self.domain[1][0] + self.domain[1][1] / 10,
-        #                    maxval=self.domain[1][1])
-        # x = jnp.array([self.domain[0][0], self.domain[0][1]])
-        # top: x1 \in (self.domain[0][0], self.domain[0][1]), x2 = self.domain[1][1], t \in (self.domain[2][0], self.domain[2][1])
+        # self.key, subkey = random.split(self.key)
+    
         x1t = lhs_sampling(
             mins=[self.domain[0][0], self.domain[2][0]],
             maxs=[self.domain[0][1], self.domain[2][1]],
@@ -182,7 +178,7 @@ class Sampler:
 def create_train_state(model, rng, lr, **kwargs):
     decay = kwargs.get("decay", 0.9)
     decay_every = kwargs.get("decay_every", 1000)
-    params = model.init(rng, jnp.ones((1, 2)), jnp.ones((1, 1)))
+    params = model.init(rng, jnp.ones(2), jnp.ones(1))
     scheduler = optax.exponential_decay(lr, decay_every, decay, staircase=True)
     optimizer = optax.adam(scheduler)
     return train_state.TrainState.create(
@@ -239,15 +235,7 @@ class PFPINN(PINN):
         return jax.lax.stop_gradient(sol)
 
 
-pinn = PFPINN(
-    num_layers=cfg.NUM_LAYERS,
-    hidden_dim=cfg.HIDDEN_DIM,
-    out_dim=cfg.OUT_DIM,
-    act_name=cfg.ACT_NAME,
-    fourier_emb=cfg.FOURIER_EMB,
-    arch_name=cfg.ARCH_NAME,
-    config=cfg,
-)
+pinn = PFPINN(config=cfg)
 
 init_key = random.PRNGKey(0)
 model_key, sampler_key = random.split(init_key)
