@@ -7,16 +7,16 @@ class Config:
     DECAY = 0.9
     DECAY_EVERY = 200
     STAGGER_PERIOD = 25
-    EMB_SCALE = (2.0, 1.0) # emb sacle for (x, t)
+    EMB_SCALE = (3.0, 1.0) # emb sacle for (x, t)
     EMB_DIM = 64
 
     DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 1]]
     DATA_PATH = "./data/2d-2pits/"
     LOG_DIR = "/root/tf-logs"
     PREFIX = "2d-2pits"
-    TS = [0.000, 2.655, 4.881, 9.984]
+    TS = [0.000, 2.360, 4.881, 9.984]
 
-    NUM_LAYERS = 10
+    NUM_LAYERS = 6
     HIDDEN_DIM = 128
     OUT_DIM = 2
 
@@ -46,7 +46,7 @@ class Config:
         "ac_eps": 1e-5,
         "ch_eps": 1e-5,
         "step_size": 10,
-        "max_last_weight": 0.99,
+        "max_last_weight": 0.90,
         "min_mean_weight": 0.5,
         "max_eps": 1e0,
         "chunks": 20,

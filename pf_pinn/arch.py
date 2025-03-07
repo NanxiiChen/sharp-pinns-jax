@@ -103,18 +103,18 @@ class ModifiedMLP(nn.Module):
     def __call__(self, x, t):
 
         if self.fourier_emb:
-            t_emb = FourierEmbedding(
+            t_emb = ExponentialEmbedding(
                 emb_scale=self.emb_scale[1], 
                 emb_dim=self.emb_dim)(t)
             x_emb = FourierEmbedding(
                 emb_scale=self.emb_scale[0], 
                 emb_dim=self.emb_dim)(x)
             
-            x_emb = Dense(x_emb.shape[-1], self.hidden_dim)(x_emb)
-            t_emb = Dense(t_emb.shape[-1], self.hidden_dim)(t_emb)
-            x = (1 + x_emb) * (1 + t_emb) - 1
+            # x_emb = Dense(x_emb.shape[-1], self.hidden_dim)(x_emb)
+            # t_emb = Dense(t_emb.shape[-1], self.hidden_dim)(t_emb)
+            # x = (1 + x_emb) * (1 + t_emb) - 1
             
-            # x = jnp.concatenate([x_emb, t_emb], axis=-1)
+            x = jnp.concatenate([x_emb, t_emb], axis=-1)
             
             # x = FourierEmbedding(emb_scale=2.0)(jnp.concatenate([x, t], axis=-1))
         else:
