@@ -171,7 +171,7 @@ class Sampler:
             self.sample_ic(),
             self.sample_bc(),
             self.sample_pde(),
-            self.sample_flux(),
+            # self.sample_flux(),
         )
 
 
@@ -256,7 +256,7 @@ sampler = Sampler(
         "num": cfg.ADAPTIVE_SAMPLES,
     },
 )
-stagger = StaggerSwitch(pde_names=["ac", "ch"], stagger_period=cfg.STAGGER_PERIOD)
+stagger = StaggerSwitch(pde_names=["ac", "ch", "ch"], stagger_period=cfg.STAGGER_PERIOD)
 
 start_time = time.time()
 for epoch in range(cfg.EPOCHS):
@@ -304,12 +304,12 @@ for epoch in range(cfg.EPOCHS):
                 "loss/ic",
                 "loss/bc",
                 "loss/irr",
-                "loss/flux",
+                # "loss/flux",
                 f"weight/{pde_name}",
                 "weight/ic",
                 "weight/bc",
                 "weight/irr",
-                "weight/flux",
+                # "weight/flux",
                 "error/error",
             ],
             values=[weighted_loss, *loss_components, *weight_components, error],

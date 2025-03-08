@@ -28,7 +28,7 @@ class PINN(nn.Module):
             self.loss_ic,
             self.loss_bc,
             self.loss_irr,
-            self.loss_flux,
+            # self.loss_flux,
         ]
         self.pde_name = "ac"
         self.aux_vars = {}
