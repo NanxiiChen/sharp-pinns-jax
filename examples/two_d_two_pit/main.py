@@ -94,10 +94,10 @@ class Sampler:
         x = lhs_sampling(
             mins=[self.domain[0][0], self.domain[1][0]],
             maxs=[self.domain[0][1], self.domain[1][1]],
-            num=self.n_samples**2 * 2,
+            num=self.n_samples ** 2,
         )
         x_local = lhs_sampling(
-            mins=[-0.3, 0], maxs=[0.3, 0.15], num=self.n_samples**2 * 2
+            mins=[-0.3, 0], maxs=[0.3, 0.15], num=self.n_samples**2 * 5
         )
         x = jnp.concatenate([x, x_local], axis=0)
         t = jnp.zeros_like(x[:, 0:1])
@@ -171,7 +171,7 @@ class Sampler:
             self.sample_ic(),
             self.sample_bc(),
             self.sample_pde(),
-            self.sample_flux(),
+            # self.sample_flux(),
         )
 
 
@@ -303,13 +303,13 @@ for epoch in range(cfg.EPOCHS):
                 "loss/ic",
                 "loss/bc",
                 "loss/irr",
-                "loss/flux",
+                # "loss/flux",
                 f"weight/{pde_name}",
                 "weight/ic",
                 "weight/bc",
                 "weight/irr",
                 "weight/flux",
-                "error/error",
+                # "error/error",
             ],
             values=[weighted_loss, *loss_components, *weight_components, error],
         )

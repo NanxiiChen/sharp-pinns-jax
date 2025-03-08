@@ -103,7 +103,7 @@ class ModifiedMLP(nn.Module):
     def __call__(self, x, t):
 
         if self.fourier_emb:
-            t_emb = ExponentialEmbedding(
+            t_emb = FourierEmbedding(
                 emb_scale=self.emb_scale[1], 
                 emb_dim=self.emb_dim)(t)
             x_emb = FourierEmbedding(

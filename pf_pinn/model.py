@@ -28,7 +28,7 @@ class PINN(nn.Module):
             self.loss_ic,
             self.loss_bc,
             self.loss_irr,
-            self.loss_flux,
+            # self.loss_flux,
         ]
         self.pde_name = "ac"
         self.aux_vars = {}
@@ -187,7 +187,7 @@ class PINN(nn.Module):
         x, t = batch
         dphi_dt, dc_dt = vmap(self.net_speed, in_axes=(None, 0, 0))(params, x, t)
         # dphi_dt must be negative, use relu to ensure it
-        return jnp.mean(jax.nn.relu(dphi_dt) ** 2) + jnp.mean(jax.nn.relu(dc_dt) ** 2)
+        return jnp.mean(jax.nn.relu(dphi_dt)) + jnp.mean(jax.nn.relu(dc_dt))
 
     @partial(jit, static_argnums=(0,))
     def loss_flux(self, params, batch):
