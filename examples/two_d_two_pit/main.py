@@ -171,7 +171,7 @@ class Sampler:
             self.sample_ic(),
             self.sample_bc(),
             self.sample_pde(),
-            # self.sample_flux(),
+            self.sample_flux(),
         )
 
 
@@ -280,6 +280,13 @@ for epoch in range(cfg.EPOCHS):
 
 
     if epoch % cfg.STAGGER_PERIOD == 0:
+        
+        # save the model
+        params = state.params
+        model_path = f"{log_path}/model-{epoch}.npz"
+        params = jax.device_get(params)
+        jnp.savez(model_path, **params)
+        
         fig, error = evaluate2D(
             pinn,
             state.params,
@@ -304,12 +311,12 @@ for epoch in range(cfg.EPOCHS):
                 "loss/ic",
                 "loss/bc",
                 "loss/irr",
-                # "loss/flux",
+                "loss/flux",
                 f"weight/{pde_name}",
                 "weight/ic",
                 "weight/bc",
                 "weight/irr",
-                # "weight/flux",
+                "weight/flux",
                 "error/error",
             ],
             values=[weighted_loss, *loss_components, *weight_components, error],
@@ -332,11 +339,7 @@ for epoch in range(cfg.EPOCHS):
     
 
 
-# save the model
-params = state.params
-model_path = f"{log_path}/model.npz"
-params = jax.device_get(params)
-jnp.savez(model_path, **params)
+
 
 end_time = time.time()
 print(f"Training time: {end_time - start_time}")

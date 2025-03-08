@@ -1,13 +1,11 @@
 import sys
 from functools import partial
-from pathlib import Path
 from typing import Callable
 
 import jax
 import jax.numpy as jnp
 from flax import linen as nn
 from jax import jit, vmap
-from jax.flatten_util import ravel_pytree
 
 
 from pf_pinn import CausalWeightor, MLP, ModifiedMLP
@@ -28,7 +26,7 @@ class PINN(nn.Module):
             self.loss_ic,
             self.loss_bc,
             self.loss_irr,
-            # self.loss_flux,
+            self.loss_flux,
         ]
         self.pde_name = "ac"
         self.aux_vars = {}
@@ -117,8 +115,9 @@ class PINN(nn.Module):
 
         # hess_phi_x, hess_c_x = jax.hessian(self.net_u, argnums=(1))(params, x, t)
         
-        hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0], argnums=0)(x, t)
-        hess_c_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(x, t)
+        # hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0], argnums=0)(x, t)
+        # hess_c_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(x, t)
+        hess_phi_x, hess_c_x = jax.hessian(self.net_u, argnums=(1))(params, x, t)
 
         nabla2phi = jnp.linalg.trace(hess_phi_x)
         nabla2c = jnp.linalg.trace(hess_c_x)

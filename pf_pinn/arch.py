@@ -4,14 +4,14 @@ from typing import Callable
 import jax
 import jax.numpy as jnp
 from flax import linen as nn
-from jax.nn.initializers import glorot_normal, normal
+from jax.nn.initializers import glorot_normal, normal, constant
 
 
 class Dense(nn.Module):
     in_features: int
     out_features: int
     kernel_init: Callable = glorot_normal()
-    bias_init: Callable = normal(stddev=0.01)
+    bias_init: Callable = constant(0.1)
 
     def setup(self):
         self.kernel = self.param('kernel', self.kernel_init,
@@ -110,11 +110,11 @@ class ModifiedMLP(nn.Module):
                 emb_scale=self.emb_scale[0], 
                 emb_dim=self.emb_dim)(x)
             
-            # x_emb = Dense(x_emb.shape[-1], self.hidden_dim)(x_emb)
-            # t_emb = Dense(t_emb.shape[-1], self.hidden_dim)(t_emb)
-            # x = (1 + x_emb) * (1 + t_emb) - 1
+            x_emb = Dense(x_emb.shape[-1], self.hidden_dim)(x_emb)
+            t_emb = Dense(t_emb.shape[-1], self.hidden_dim)(t_emb)
+            x = (1 + x_emb) * (1 + t_emb) - 1
             
-            x = jnp.concatenate([x_emb, t_emb], axis=-1)
+            # x = jnp.concatenate([x_emb, t_emb], axis=-1)
             
             # x = FourierEmbedding(emb_scale=2.0)(jnp.concatenate([x, t], axis=-1))
         else:

@@ -46,10 +46,10 @@ class Config:
         "ac_eps": 1e-5,
         "ch_eps": 1e-5,
         "step_size": 10,
-        "max_last_weight": 0.99,
+        "max_last_weight": 0.90,
         "min_mean_weight": 0.5,
         "max_eps": 1e0,
-        "chunks": 16,
+        "chunks": 24,
     }
 
 
