@@ -92,7 +92,7 @@ class Sampler:
             key=key,
         )
         x_local = lhs_sampling(
-            mins=[-0.3, 0], maxs=[0.3, 0.15], num=self.n_samples**2 * 5, key=key
+            mins=[-0.3, 0], maxs=[0.3, 0.15], num=self.n_samples**2 * 10, key=key
         )
         x = jnp.concatenate([x, x_local], axis=0)
         t = jnp.zeros_like(x[:, 0:1])
@@ -217,7 +217,7 @@ class PFPINN(PINN):
                     jnp.sqrt(cfg.OMEGA_PHI)
                     / jnp.sqrt(2 * cfg.ALPHA_PHI)
                     * (r - 0.05)
-                    * cfg.Lc * 2
+                    * cfg.Lc * 4
                 )
             )
             / 2
