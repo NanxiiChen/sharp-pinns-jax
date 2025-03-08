@@ -9,6 +9,7 @@ class Config:
     STAGGER_PERIOD = 25
     EMB_SCALE = (2.0, 0.5) # emb sacle for (x, t)
     EMB_DIM = 64
+    TEM_POWER = 2.0
 
     DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 1]]
     DATA_PATH = "./data/2d-2pits/"

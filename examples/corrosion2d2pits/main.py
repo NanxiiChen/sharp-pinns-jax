@@ -62,11 +62,11 @@ class Sampler:
         key, self.key = random.split(self.key)
         data = shifted_grid(
             self.mins,
-            self.maxs,
+            [self.domain[0][1], self.domain[1][1], self.domain[2][1]**(1/cfg.TEM_POWER)],
             [self.n_samples, self.n_samples, self.n_samples * 3],
             key,
         )
-        return data[:, :-1], data[:, -1:]
+        return data[:, :-1], data[:, -1:] ** cfg.TEM_POWER
 
     def sample_pde_rar(self, pde_name="ac"):
         key, self.key = random.split(self.key)
