@@ -171,7 +171,7 @@ class Sampler:
             self.sample_ic(),
             self.sample_bc(),
             self.sample_pde(),
-            # self.sample_flux(),
+            self.sample_flux(),
         )
 
 
@@ -267,13 +267,14 @@ for epoch in range(cfg.EPOCHS):
     if epoch % cfg.STAGGER_PERIOD == 0:
         sampler.adaptive_kw["params"].update(state.params)
         batch = sampler.sample(pde_name=pde_name)
+        print(f"Epoch: {epoch}, PDE: {pde_name}")
 
 
     state, (weighted_loss, loss_components, weight_components, aux_vars) = train_step(
         state, batch, cfg.CAUSAL_CONFIGS[pde_name + "_eps"]
     )
     if cfg.CAUSAL_WEIGHT:
-        update_causal_eps(aux_vars["causal_weights"], cfg.CAUSAL_CONFIGS, pde_name) 
+        update_causal_eps(aux_vars["causal_weights"], cfg.CAUSAL_CONFIGS, pde_name)
     stagger.step_epoch()
 
 
@@ -303,13 +304,13 @@ for epoch in range(cfg.EPOCHS):
                 "loss/ic",
                 "loss/bc",
                 "loss/irr",
-                # "loss/flux",
+                "loss/flux",
                 f"weight/{pde_name}",
                 "weight/ic",
                 "weight/bc",
                 "weight/irr",
                 "weight/flux",
-                # "error/error",
+                "error/error",
             ],
             values=[weighted_loss, *loss_components, *weight_components, error],
         )

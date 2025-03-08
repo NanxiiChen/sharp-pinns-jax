@@ -4,14 +4,14 @@ from typing import Callable
 import jax
 import jax.numpy as jnp
 from flax import linen as nn
-from jax.nn.initializers import glorot_normal, normal, zeros
+from jax.nn.initializers import glorot_normal, normal
 
 
 class Dense(nn.Module):
     in_features: int
     out_features: int
     kernel_init: Callable = glorot_normal()
-    bias_init: Callable = zeros
+    bias_init: Callable = normal(stddev=0.01)
 
     def setup(self):
         self.kernel = self.param('kernel', self.kernel_init,
