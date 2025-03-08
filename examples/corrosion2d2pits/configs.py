@@ -17,11 +17,11 @@ class Config:
     TS = [0.000, 2.360, 4.881, 9.984]
 
     NUM_LAYERS = 6
-    HIDDEN_DIM = 128
+    HIDDEN_DIM = 200
     OUT_DIM = 2
 
 
-    ACT_NAME = "gelu"
+    ACT_NAME = "tanh"
     ARCH_NAME = "modified_mlp"
     FOURIER_EMB = True
     CAUSAL_WEIGHT = True
