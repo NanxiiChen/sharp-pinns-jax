@@ -8,7 +8,7 @@ from flax import linen as nn
 from jax import jit, vmap
 
 
-from pf_pinn import CausalWeightor, MLP, ModifiedMLP
+from . import CausalWeightor, MLP, ModifiedMLP
 
 
 class PINN(nn.Module):

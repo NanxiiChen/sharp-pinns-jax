@@ -2,13 +2,13 @@ from matplotlib import RcParams
 import matplotlib
 import jax
 
-from pf_pinn.arch import MLP, ModifiedMLP
-from pf_pinn.evaluator import evaluate1D, evaluate2D
-from pf_pinn.metrics import MetricsTracker
-from pf_pinn.sample import mesh_flat, lhs_sampling, shfted_grid
-from pf_pinn.causal import CausalWeightor, update_causal_eps
-from pf_pinn.utils import StaggerSwitch
-from pf_pinn.model import PINN
+from .arch import MLP, ModifiedMLP
+from .evaluator import evaluate1D, evaluate2D
+from .metrics import MetricsTracker
+from .sample import mesh_flat, lhs_sampling, shifted_grid
+from .causal import CausalWeightor, update_causal_eps
+from .utils import StaggerSwitch
+from .model import PINN
 
 jax.config.update("jax_default_matmul_precision", "high")
 

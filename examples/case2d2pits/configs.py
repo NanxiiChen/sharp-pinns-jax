@@ -1,22 +1,23 @@
 class Config:
     EPOCHS = 100000
-    N_SAMPLES = 25
-    ADAPTIVE_SAMPLES = 4000
-    ADAPTIVE_BASE_RATE = 10
+    N_SAMPLES = 15
+    ADAPTIVE_SAMPLES = 6000
+    ADAPTIVE_BASE_RATE = 5
     LR = 5e-4
     DECAY = 0.9
     DECAY_EVERY = 200
     STAGGER_PERIOD = 25
-
+    EMB_SCALE = (2.0, 1.0) # emb sacle for (x, t)
+    EMB_DIM = 64
 
     DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 1]]
-    DATA_PATH = "./data/2d-1pit/"
+    DATA_PATH = "./data/2d-2pits/"
     LOG_DIR = "/root/tf-logs"
-    PREFIX = "2d-1pit"
-    TS = [0.000, 1.534, 5.118, 9.726]
+    PREFIX = "2d-2pits"
+    TS = [0.000, 2.360, 4.881, 9.984]
 
     NUM_LAYERS = 6
-    HIDDEN_DIM = 200
+    HIDDEN_DIM = 128
     OUT_DIM = 2
 
 
@@ -48,7 +49,7 @@ class Config:
         "max_last_weight": 0.99,
         "min_mean_weight": 0.5,
         "max_eps": 1e0,
-        "chunks": 20,
+        "chunks": 24,
     }
 
 

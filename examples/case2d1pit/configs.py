@@ -11,10 +11,10 @@ class Config:
     EMB_DIM = 64
 
     DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 1]]
-    DATA_PATH = "./data/2d-2pits/"
+    DATA_PATH = "./data/2d-1pit/"
     LOG_DIR = "/root/tf-logs"
-    PREFIX = "2d-2pits"
-    TS = [0.000, 2.360, 4.881, 9.984]
+    PREFIX = "2d-1pit"
+    TS = [0.000, 1.534, 5.118, 9.726]
 
     NUM_LAYERS = 6
     HIDDEN_DIM = 128

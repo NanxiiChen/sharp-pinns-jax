@@ -16,7 +16,7 @@ project_root = current_dir.parent.parent  # 向上两级到 project_working_dir
 sys.path.append(str(project_root))  # 将根目录加入模块搜索路径
 
 from pf_pinn import *
-from examples.two_d_one_pit.configs import Config as cfg
+from examples.case2d1pit.configs import Config as cfg
 
 
 # from jax import config
@@ -46,7 +46,9 @@ class Sampler:
 
     def adaptive_sampling(self, residual_fn):
         adaptive_base = lhs_sampling(
-            self.mins, self.maxs, self.adaptive_kw["num"] * self.adaptive_kw["ratio"]
+            self.mins, self.maxs, 
+            self.adaptive_kw["num"] * self.adaptive_kw["ratio"],
+            key=self.key
         )
         residuals = residual_fn(adaptive_base)
         max_residuals, indices = jax.lax.top_k(
@@ -56,7 +58,7 @@ class Sampler:
 
     def sample_pde(self):
         # data = lhs_sampling(self.mins, self.maxs, self.n_samples**3)
-        data = shfted_grid(
+        data = shifted_grid(
             self.mins,
             self.maxs,
             [self.n_samples, self.n_samples, self.n_samples * 3],
@@ -64,27 +66,15 @@ class Sampler:
         )
         return data[:, :-1], data[:, -1:]
 
-    def sample_ac(self):
-        batch = lhs_sampling(self.mins, self.maxs, self.n_samples**3)
+    def sample_pde_rar(self, pde_name="ac"):
+        batch = lhs_sampling(self.mins, self.maxs, self.n_samples**3, self.key)
 
         def residual_fn(batch):
             model = self.adaptive_kw["model"]
             params = self.adaptive_kw["params"]
             x, t = batch[:, :-1], batch[:, -1:]
-            return vmap(model.net_ac, in_axes=(None, 0, 0))(params, x, t)
-
-        adaptive_sampling = self.adaptive_sampling(residual_fn)
-        data = jnp.concatenate([batch, adaptive_sampling], axis=0)
-        return data[:, :-1], data[:, -1:]
-
-    def sample_ch(self):
-        batch = lhs_sampling(self.mins, self.maxs, self.n_samples**2)
-
-        def residual_fn(batch):
-            model = self.adaptive_kw["model"]
-            params = self.adaptive_kw["params"]
-            x, t = batch[:, :-1], batch[:, -1:]
-            return vmap(model.net_ch, in_axes=(None, 0, 0))(params, x, t)
+            fn = model.net_ac if pde_name == "ac" else model.net_ch
+            return vmap(fn, in_axes=(None, 0, 0))(params, x, t)
 
         adaptive_sampling = self.adaptive_sampling(residual_fn)
         data = jnp.concatenate([batch, adaptive_sampling], axis=0)
@@ -94,52 +84,64 @@ class Sampler:
         x = lhs_sampling(
             mins=[self.domain[0][0], self.domain[1][0]],
             maxs=[self.domain[0][1], self.domain[1][1]],
-            num=self.n_samples**2
+            num=self.n_samples ** 2,
+            key=self.key
         )
-        x_local = x / 5
+        x_local = lhs_sampling(
+            mins=[-0.15, 0], maxs=[0.15, 0.15], num=self.n_samples**2 * 5, key=self.key
+        )
         x = jnp.concatenate([x, x_local], axis=0)
         t = jnp.zeros_like(x[:, 0:1])
         return x, t
 
     def sample_bc(self):
-        self.key, subkey = random.split(self.key)
-        # t = random.uniform(subkey, (self.n_samples,),
-        #                    minval=self.domain[1][0] + self.domain[1][1] / 10,
-        #                    maxval=self.domain[1][1])
-        # x = jnp.array([self.domain[0][0], self.domain[0][1]])
-        # top: x1 \in (self.domain[0][0], self.domain[0][1]), x2 = self.domain[1][1], t \in (self.domain[2][0], self.domain[2][1])
+        # self.key, subkey = random.split(self.key)
+    
         x1t = lhs_sampling(
             mins=[self.domain[0][0], self.domain[2][0]],
             maxs=[self.domain[0][1], self.domain[2][1]],
-            num=self.n_samples**2/2
+            num=self.n_samples**2 // 5,
+            key=self.key
         )
-        top = jnp.concatenate([x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1])*self.domain[1][1], 
-                               x1t[:, 1:2]], axis=1)
+        top = jnp.concatenate(
+            [x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1]) * self.domain[1][1], x1t[:, 1:2]],
+            axis=1,
+        )
         x2t = lhs_sampling(
             mins=[self.domain[1][0], self.domain[2][0]],
             maxs=[self.domain[1][1], self.domain[2][1]],
-            num=self.n_samples**2/2
+            num=self.n_samples**2 // 5,
+            key=self.key
         )
-        left = jnp.concatenate([jnp.ones_like(x2t[:, 0:1])*self.domain[0][0], x2t[:, 0:1], x2t[:, 1:2]], axis=1)
-        right = jnp.concatenate([jnp.ones_like(x2t[:, 0:1])*self.domain[0][1], x2t[:, 0:1], x2t[:, 1:2]], axis=1)
-        
+        left = jnp.concatenate(
+            [jnp.ones_like(x2t[:, 0:1]) * self.domain[0][0], x2t[:, 0:1], x2t[:, 1:2]],
+            axis=1,
+        )
+        right = jnp.concatenate(
+            [jnp.ones_like(x2t[:, 0:1]) * self.domain[0][1], x2t[:, 0:1], x2t[:, 1:2]],
+            axis=1,
+        )
+
         # local: x1 \in (self.domain[0][0]/20, self.domain[0][1]/20), x2 = self.domain[1][0], t \in (self.domain[2][0] + self.domain[2][1] / 10, self.domain[2][1])
         x1t = lhs_sampling(
-            mins=[self.domain[0][0]/20, self.domain[2][0] + self.domain[2][1] / 5],
-            maxs=[self.domain[0][1]/20, self.domain[2][1]],
-            num=self.n_samples**2/2
+            mins=[self.domain[0][0] / 20, self.domain[2][0] + self.domain[2][1] / 10],
+            maxs=[self.domain[0][1] / 20, self.domain[2][1]],
+            num=self.n_samples**2 // 5,
+            key=self.key
         )
-        local = jnp.concatenate([x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1])*self.domain[1][0], 
-                                 x1t[:, 1:2]], axis=1)
+        local = jnp.concatenate(
+            [x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1]) * self.domain[1][0], x1t[:, 1:2]],
+            axis=1,
+        )
         data = jnp.concatenate([top, left, right, local], axis=0)
         return data[:, :-1], data[:, -1:]
-    
-    
+
     def sample_flux(self):
         x1t = lhs_sampling(
             mins=[self.domain[0][0], self.domain[2][0]],
             maxs=[self.domain[0][1], self.domain[2][1]],
-            num=self.n_samples**2 / 2,
+            num=self.n_samples**2 // 2,
+            key=self.key
         )
         top = jnp.concatenate(
             [x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1]) * self.domain[1][0], x1t[:, 1:2]],
@@ -148,18 +150,11 @@ class Sampler:
         return top[:, :-1], top[:, -1:]
 
     def sample(self, pde_name="ac"):
-        if pde_name == "ac":
-            data_pde = self.sample_ac()
-        elif pde_name == "ch":
-            data_pde = self.sample_ch()
-        else:
-            raise ValueError("Invalid PDE name")
-        # data_pde = self.sample_pde()
         return (
-            data_pde,
+            self.sample_pde_rar(pde_name=pde_name),
             self.sample_ic(),
             self.sample_bc(),
-            data_pde,
+            self.sample_pde(),
             self.sample_flux(),
         )
 
@@ -167,7 +162,7 @@ class Sampler:
 def create_train_state(model, rng, lr, **kwargs):
     decay = kwargs.get("decay", 0.9)
     decay_every = kwargs.get("decay_every", 1000)
-    params = model.init(rng, jnp.ones((1, 2)), jnp.ones((1, 1)))
+    params = model.init(rng, jnp.ones(2), jnp.ones(1))
     scheduler = optax.exponential_decay(lr, decay_every, decay, staircase=True)
     optimizer = optax.adam(scheduler)
     return train_state.TrainState.create(
@@ -211,15 +206,7 @@ class PFPINN(PINN):
         return jax.lax.stop_gradient(sol)
 
 
-pinn = PFPINN(
-    num_layers=cfg.NUM_LAYERS,
-    hidden_dim=cfg.HIDDEN_DIM,
-    out_dim=cfg.OUT_DIM,
-    act_name=cfg.ACT_NAME,
-    fourier_emb=cfg.FOURIER_EMB,
-    arch_name=cfg.ARCH_NAME,
-    config=cfg,
-)
+pinn = PFPINN(config=cfg)
 
 init_key = random.PRNGKey(0)
 model_key, sampler_key = random.split(init_key)
@@ -240,24 +227,37 @@ sampler = Sampler(
         "num": cfg.ADAPTIVE_SAMPLES,
     },
 )
-stagger = StaggerSwitch()
+stagger = StaggerSwitch(pde_names=["ac", "ch", "ch"], stagger_period=cfg.STAGGER_PERIOD)
 
 start_time = time.time()
 for epoch in range(cfg.EPOCHS):
-    pde_name = stagger.switch(epoch, cfg.STAGGER_PERIOD)
+    pde_name = stagger.decide_pde()
     pinn.pde_name = pde_name
     pinn.causal_weightor.pde_name = pde_name
 
     if epoch % cfg.STAGGER_PERIOD == 0:
         sampler.adaptive_kw["params"].update(state.params)
         batch = sampler.sample(pde_name=pde_name)
+        print(f"Epoch: {epoch}, PDE: {pde_name}")
+
 
     state, (weighted_loss, loss_components, weight_components, aux_vars) = train_step(
         state, batch, cfg.CAUSAL_CONFIGS[pde_name + "_eps"]
     )
-    update_causal_eps(aux_vars["causal_weights"], cfg.CAUSAL_CONFIGS, pde_name)
+    if cfg.CAUSAL_WEIGHT:
+        update_causal_eps(aux_vars["causal_weights"], cfg.CAUSAL_CONFIGS, pde_name)
+    stagger.step_epoch()
+
+
 
     if epoch % cfg.STAGGER_PERIOD == 0:
+        
+        # save the model
+        params = state.params
+        model_path = f"{log_path}/model-{epoch}.npz"
+        params = jax.device_get(params)
+        jnp.savez(model_path, **params)
+        
         fig, error = evaluate2D(
             pinn,
             state.params,
@@ -295,23 +295,22 @@ for epoch in range(cfg.EPOCHS):
         metrics_tracker.register_figure(epoch, fig, "error")
         plt.close(fig)
 
-        fig = pinn.causal_weightor.plot_causal_info(
-            pde_name,
-            aux_vars["causal_weights"],
-            aux_vars["loss_chunks"],
-            cfg.CAUSAL_CONFIGS[pde_name + "_eps"],
-        )
-        metrics_tracker.register_figure(epoch, fig, "causal_info")
-        plt.close(fig)
+        if cfg.CAUSAL_WEIGHT:
+            fig = pinn.causal_weightor.plot_causal_info(
+                pde_name,
+                aux_vars["causal_weights"],
+                aux_vars["loss_chunks"],
+                cfg.CAUSAL_CONFIGS[pde_name + "_eps"],
+            )
+            metrics_tracker.register_figure(epoch, fig, "causal_info")
+            plt.close(fig)
 
         metrics_tracker.flush()
+        
+    
 
 
-# save the model
-params = state.params
-model_path = f"{log_path}/model.npz"
-params = jax.device_get(params)
-jnp.savez(model_path, **params)
+
 
 end_time = time.time()
 print(f"Training time: {end_time - start_time}")
