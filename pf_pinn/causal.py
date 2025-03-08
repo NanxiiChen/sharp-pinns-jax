@@ -9,7 +9,7 @@ class CausalWeightor:
 
         self.num_chunks = num_chunks
         self.t_range = t_range
-        self.bins = jnp.linspace(t_range[0], t_range[1]**(1/2), num_chunks + 1) ** 2
+        self.bins = jnp.linspace(t_range[0], t_range[1]**(1/3), num_chunks + 1) ** 3
         self.pde_name = pde_name
 
     @partial(jax.jit, static_argnums=(0,))

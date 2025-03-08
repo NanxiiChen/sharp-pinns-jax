@@ -5,11 +5,11 @@ class Config:
     ADAPTIVE_BASE_RATE = 5
     LR = 5e-4
     DECAY = 0.9
-    DECAY_EVERY = 200
+    DECAY_EVERY = 500
     STAGGER_PERIOD = 25
-    EMB_SCALE = (2.0, 0.5) # emb sacle for (x, t)
+    EMB_SCALE = (2.0, 0.6) # emb sacle for (x, t)
     EMB_DIM = 64
-    TEM_POWER = 2.0
+    TEM_POWER = 3.0
 
     DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 1]]
     DATA_PATH = "./data/2d-2pits/"
@@ -46,10 +46,10 @@ class Config:
     CAUSAL_CONFIGS = {
         "ac_eps": 1e-5,
         "ch_eps": 1e-5,
-        "step_size": 10,
-        "max_last_weight": 0.99,
+        "step_size": 5,
+        "max_last_weight": 0.90,
         "min_mean_weight": 0.5,
-        "max_eps": 1e0,
+        "max_eps": 1e1,
         "chunks": 24,
     }
 

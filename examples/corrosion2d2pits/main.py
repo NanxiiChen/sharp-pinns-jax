@@ -164,7 +164,7 @@ class Sampler:
             self.sample_ic(),
             self.sample_bc(),
             self.sample_pde(),
-            self.sample_flux(),
+            # self.sample_flux(),
         )
 
 
@@ -217,7 +217,7 @@ class PFPINN(PINN):
                     jnp.sqrt(cfg.OMEGA_PHI)
                     / jnp.sqrt(2 * cfg.ALPHA_PHI)
                     * (r - 0.05)
-                    * cfg.Lc * 4
+                    * cfg.Lc * 3
                 )
             )
             / 2
@@ -226,6 +226,35 @@ class PFPINN(PINN):
         c = h_phi * cfg.CSE + (1 - h_phi) * 0.0
         sol = jnp.stack([phi, c], axis=1)
         return jax.lax.stop_gradient(sol)
+    
+    # @partial(jit, static_argnums=(0,))
+    # def net_u(self, params, x, t):
+    #     # init_sol = self.ref_sol_ic(x, t)
+    #     def init_sol_fn(x, t):
+    #         r = jnp.sqrt((jnp.abs(x[0]) - 0.15) ** 2 + x[1] ** 2)
+    #         phi = (
+    #             1
+    #             - (
+    #                 1
+    #                 - jnp.tanh(
+    #                     jnp.sqrt(cfg.OMEGA_PHI)
+    #                     / jnp.sqrt(2 * cfg.ALPHA_PHI)
+    #                     * (r - 0.05)
+    #                     * cfg.Lc * 4
+    #                 )
+    #             )
+    #             / 2
+    #         )
+    #         h_phi = -2 * phi**3 + 3 * phi**2
+    #         c = h_phi * cfg.CSE + (1 - h_phi) * 0.0
+    #         sol = jnp.stack([phi, c], axis=-1)
+    #         return jax.lax.stop_gradient(sol)
+    #     init_sol = init_sol_fn(x, t)
+        
+    #     change = self.model.apply(params, x, t)
+    #     return init_sol + change * t
+        
+        
 
 
 pinn = PFPINN(config=cfg)
@@ -249,7 +278,7 @@ sampler = Sampler(
         "num": cfg.ADAPTIVE_SAMPLES,
     },
 )
-stagger = StaggerSwitch(pde_names=["ac", "ch",], stagger_period=cfg.STAGGER_PERIOD)
+stagger = StaggerSwitch(pde_names=["ac", "ch", "ch"], stagger_period=cfg.STAGGER_PERIOD)
 
 start_time = time.time()
 for epoch in range(cfg.EPOCHS):
@@ -301,12 +330,12 @@ for epoch in range(cfg.EPOCHS):
                 "loss/ic",
                 "loss/bc",
                 "loss/irr",
-                "loss/flux",
+                # "loss/flux",
                 f"weight/{pde_name}",
                 "weight/ic",
                 "weight/bc",
                 "weight/irr",
-                "weight/flux",
+                # "weight/flux",
                 "error/error",
             ],
             values=[weighted_loss, *loss_components, *weight_components, error],
