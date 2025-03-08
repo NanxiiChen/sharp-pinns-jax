@@ -83,11 +83,11 @@ class PINN(nn.Module):
         dh_dphi = -6 * phi**2 + 6 * phi
         dg_dphi = 4 * phi**3 - 6 * phi**2 + 2 * phi
 
-        jac_phi_t = jax.jacfwd(lambda x, t: self.net_u(params, x, t)[0], argnums=1)
+        jac_phi_t = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0], argnums=1)
         dphi_dt = jac_phi_t(x, t)[0]
 
         hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0], argnums=0)
-        nabla2phi = jnp.linalg.trace(hess_phi_x(x, t))
+        lap_phi = jnp.linalg.trace(hess_phi_x(x, t))
 
         ac = (
             dphi_dt
@@ -96,7 +96,7 @@ class PINN(nn.Module):
             * (self.cfg.CSE - self.cfg.CLE)
             * dh_dphi
             + AC2 * dg_dphi
-            - AC3 * nabla2phi
+            - AC3 * lap_phi
         )
         return ac / self.cfg.AC_PRE_SCALE
 
@@ -107,10 +107,10 @@ class PINN(nn.Module):
         # self.net_u : (x, t) --> (phi, c)
         phi, c = self.net_u(params, x, t)
 
-        jac_phi_x = jax.jacfwd(lambda x, t: self.net_u(params, x, t)[0], argnums=0)
-        dphi_dx = jac_phi_x(x, t)
+        jac_phi_x = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0], argnums=0)
+        nabla_phi = jac_phi_x(x, t)
 
-        jac_c_t = jax.jacfwd(lambda x, t: self.net_u(params, x, t)[1], argnums=1)
+        jac_c_t = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1], argnums=1)
         dc_dt = jac_c_t(x, t)[0]
 
         # hess_phi_x, hess_c_x = jax.hessian(self.net_u, argnums=(1))(params, x, t)
@@ -119,31 +119,31 @@ class PINN(nn.Module):
         # hess_c_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(x, t)
         hess_phi_x, hess_c_x = jax.hessian(self.net_u, argnums=(1))(params, x, t)
 
-        nabla2phi = jnp.linalg.trace(hess_phi_x)
-        nabla2c = jnp.linalg.trace(hess_c_x)
+        lap_phi = jnp.linalg.trace(hess_phi_x)
+        lap_c = jnp.linalg.trace(hess_c_x)
 
-        nabla2_hphi = 6 * (
-            phi * (1 - phi) * nabla2phi 
-            + (1 - 2 * phi) * jnp.sum(dphi_dx**2)
+        lap_h_phi = 6 * (
+            phi * (1 - phi) * lap_phi 
+            + (1 - 2 * phi) * jnp.sum(nabla_phi**2)
         )
 
-        ch = dc_dt - CH1 * nabla2c + CH1 * (self.cfg.CSE - self.cfg.CLE) * nabla2_hphi
+        ch = dc_dt - CH1 * lap_c + CH1 * (self.cfg.CSE - self.cfg.CLE) * lap_h_phi
 
         return ch / self.cfg.CH_PRE_SCALE
 
     @partial(jit, static_argnums=(0,))
     def net_speed(self, params, x, t):
-        jac_dt = jax.jacfwd(self.net_u, argnums=2)
+        jac_dt = jax.jacrev(self.net_u, argnums=2)
         dphi_dt, dc_dt = jac_dt(params, x, t)
         return dphi_dt, dc_dt
 
     @partial(jit, static_argnums=(0,))
     def net_nabla(self, params, x, t, on="y"):
         idx = 1 if on == "y" else 0
-        nabla_phi_part = jax.jacfwd(
+        nabla_phi_part = jax.jacrev(
             lambda x, t: self.net_u(params, x, t)[0], argnums=0
         )(x, t)[idx]
-        nabla_c_part = jax.jacfwd(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(
+        nabla_c_part = jax.jacrev(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(
             x, t
         )[idx]
         return nabla_phi_part, nabla_c_part
