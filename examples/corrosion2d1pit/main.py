@@ -16,7 +16,7 @@ project_root = current_dir.parent.parent  # 向上两级到 project_working_dir
 sys.path.append(str(project_root))  # 将根目录加入模块搜索路径
 
 from pf_pinn import *
-from examples.case2d2pits.configs import Config as cfg
+from examples.corrosion2d1pit.configs import Config as cfg
 
 
 # from jax import config
@@ -88,11 +88,11 @@ class Sampler:
         x = lhs_sampling(
             mins=[self.domain[0][0], self.domain[1][0]],
             maxs=[self.domain[0][1], self.domain[1][1]],
-            num=self.n_samples**2,
-            key=key,
+            num=self.n_samples ** 2,
+            key=key
         )
         x_local = lhs_sampling(
-            mins=[-0.3, 0], maxs=[0.3, 0.15], num=self.n_samples**2 * 5, key=key
+            mins=[-0.15, 0], maxs=[0.15, 0.15], num=self.n_samples**2 * 5, key=self.key
         )
         x = jnp.concatenate([x, x_local], axis=0)
         t = jnp.zeros_like(x[:, 0:1])
@@ -100,12 +100,12 @@ class Sampler:
 
     def sample_bc(self):
         key, self.key = random.split(self.key)
-
+    
         x1t = lhs_sampling(
             mins=[self.domain[0][0], self.domain[2][0]],
             maxs=[self.domain[0][1], self.domain[2][1]],
             num=self.n_samples**2 // 5,
-            key=key,
+            key=key
         )
         top = jnp.concatenate(
             [x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1]) * self.domain[1][1], x1t[:, 1:2]],
@@ -115,7 +115,7 @@ class Sampler:
             mins=[self.domain[1][0], self.domain[2][0]],
             maxs=[self.domain[1][1], self.domain[2][1]],
             num=self.n_samples**2 // 5,
-            key=key,
+            key=key
         )
         left = jnp.concatenate(
             [jnp.ones_like(x2t[:, 0:1]) * self.domain[0][0], x2t[:, 0:1], x2t[:, 1:2]],
@@ -131,17 +131,13 @@ class Sampler:
             mins=[self.domain[0][0] / 20, self.domain[2][0] + self.domain[2][1] / 10],
             maxs=[self.domain[0][1] / 20, self.domain[2][1]],
             num=self.n_samples**2 // 5,
-            key=key,
+            key=key
         )
         local = jnp.concatenate(
             [x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1]) * self.domain[1][0], x1t[:, 1:2]],
             axis=1,
         )
-        local_left = local.copy()
-        local_right = local.copy()
-        local_left = local_left.at[:, 0:1].set(local_left[:, 0:1] - 0.15)
-        local_right = local_right.at[:, 0:1].set(local_right[:, 0:1] + 0.15)
-        data = jnp.concatenate([top, left, right, local_left, local_right], axis=0)
+        data = jnp.concatenate([top, left, right, local], axis=0)
         return data[:, :-1], data[:, -1:]
 
     def sample_flux(self):
@@ -150,7 +146,7 @@ class Sampler:
             mins=[self.domain[0][0], self.domain[2][0]],
             maxs=[self.domain[0][1], self.domain[2][1]],
             num=self.n_samples**2 // 2,
-            key=key,
+            key=key
         )
         top = jnp.concatenate(
             [x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1]) * self.domain[1][0], x1t[:, 1:2]],
@@ -198,30 +194,17 @@ class PFPINN(PINN):
     @partial(jit, static_argnums=(0,))
     def ref_sol_bc(self, x, t):
         # x: (x1, x2)
-        r = jnp.sqrt((jnp.abs(x[:, 0]) - 0.15) ** 2 + x[:, 1] ** 2)
-        # phi = jnp.where(r < 0.05**2, 0, 1)
-        # c = jnp.where(r < 0.05**2, 0, 1)
-        phi = (r > 0.05).astype(jnp.float32)
-        c = phi.copy()
+        r = x[:, 0]**2 + x[:, 1]**2
+        phi = jnp.where(r < 0.05**2, 0, 1)
+        c = jnp.where(r < 0.05**2, 0, 1)
         sol = jnp.stack([phi, c], axis=1)
         return jax.lax.stop_gradient(sol)
 
     @partial(jit, static_argnums=(0,))
     def ref_sol_ic(self, x, t):
-        r = jnp.sqrt((jnp.abs(x[:, 0]) - 0.15) ** 2 + x[:, 1] ** 2)
-        phi = (
-            1
-            - (
-                1
-                - jnp.tanh(
-                    jnp.sqrt(cfg.OMEGA_PHI)
-                    / jnp.sqrt(2 * cfg.ALPHA_PHI)
-                    * (r - 0.05)
-                    * cfg.Lc
-                )
-            )
-            / 2
-        )
+        r = jnp.sqrt(x[:, 0]**2 + x[:, 1]**2)
+        phi = 1 - (1 - jnp.tanh(jnp.sqrt(cfg.OMEGA_PHI) /
+                            jnp.sqrt(2 * cfg.ALPHA_PHI) * (r-0.05) * cfg.Lc)) / 2
         h_phi = -2 * phi**3 + 3 * phi**2
         c = h_phi * cfg.CSE + (1 - h_phi) * 0.0
         sol = jnp.stack([phi, c], axis=1)
@@ -249,7 +232,7 @@ sampler = Sampler(
         "num": cfg.ADAPTIVE_SAMPLES,
     },
 )
-stagger = StaggerSwitch(pde_names=["ac", "ch",], stagger_period=cfg.STAGGER_PERIOD)
+stagger = StaggerSwitch(pde_names=["ac", "ch", "ch"], stagger_period=cfg.STAGGER_PERIOD)
 
 start_time = time.time()
 for epoch in range(cfg.EPOCHS):
@@ -262,6 +245,7 @@ for epoch in range(cfg.EPOCHS):
         batch = sampler.sample(pde_name=pde_name)
         print(f"Epoch: {epoch}, PDE: {pde_name}")
 
+
     state, (weighted_loss, loss_components, weight_components, aux_vars) = train_step(
         state, batch, cfg.CAUSAL_CONFIGS[pde_name + "_eps"]
     )
@@ -269,14 +253,16 @@ for epoch in range(cfg.EPOCHS):
         update_causal_eps(aux_vars["causal_weights"], cfg.CAUSAL_CONFIGS, pde_name)
     stagger.step_epoch()
 
-    if epoch % cfg.STAGGER_PERIOD == 0:
 
+
+    if epoch % cfg.STAGGER_PERIOD == 0:
+        
         # save the model
         params = state.params
         model_path = f"{log_path}/model-{epoch}.npz"
         params = jax.device_get(params)
         jnp.savez(model_path, **params)
-
+        
         fig, error = evaluate2D(
             pinn,
             state.params,
@@ -325,6 +311,10 @@ for epoch in range(cfg.EPOCHS):
             plt.close(fig)
 
         metrics_tracker.flush()
+        
+    
+
+
 
 
 end_time = time.time()

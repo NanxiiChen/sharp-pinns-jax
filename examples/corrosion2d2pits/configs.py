@@ -7,7 +7,7 @@ class Config:
     DECAY = 0.9
     DECAY_EVERY = 200
     STAGGER_PERIOD = 25
-    EMB_SCALE = (2.0, 1.0) # emb sacle for (x, t)
+    EMB_SCALE = (2.0, 0.5) # emb sacle for (x, t)
     EMB_DIM = 64
 
     DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 1]]
