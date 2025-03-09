@@ -7,7 +7,7 @@ class Config:
     DECAY = 0.9
     DECAY_EVERY = 200
     STAGGER_PERIOD = 25
-    EMB_SCALE = (2.0, 0.4) # emb sacle for (x, t)
+    EMB_SCALE = (2.0, 0.5) # emb sacle for (x, t)
     EMB_DIM = 64
 
     DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 1]]
@@ -17,14 +17,14 @@ class Config:
     TS = [0.000, 1.534, 5.118, 9.726]
 
     NUM_LAYERS = 6
-    HIDDEN_DIM = 128
+    HIDDEN_DIM = 200
     OUT_DIM = 2
 
 
-    ACT_NAME = "gelu"
+    ACT_NAME = "tanh"
     ARCH_NAME = "modified_mlp"
     FOURIER_EMB = True
-    CAUSAL_WEIGHT = True
+    CAUSAL_WEIGHT = False
 
     ALPHA_PHI = 1.03e-4
     OMEGA_PHI = 1.76e7

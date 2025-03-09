@@ -1,6 +1,6 @@
 class Config:
-    EPOCHS = 100000
-    N_SAMPLES = 15
+    EPOCHS = 1000
+    N_SAMPLES = 20
     ADAPTIVE_SAMPLES = 6000
     ADAPTIVE_BASE_RATE = 5
     LR = 5e-4
