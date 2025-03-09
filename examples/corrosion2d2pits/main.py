@@ -62,11 +62,11 @@ class Sampler:
         key, self.key = random.split(self.key)
         data = shifted_grid(
             self.mins,
-            [self.domain[0][1], self.domain[1][1], self.domain[2][1]**(1/cfg.TEM_POWER)],
-            [self.n_samples, self.n_samples, self.n_samples * 3],
+            self.maxs,
+            [self.n_samples*2, self.n_samples, self.n_samples * 3],
             key,
         )
-        return data[:, :-1], data[:, -1:] ** cfg.TEM_POWER
+        return data[:, :-1], data[:, -1:]
 
     def sample_pde_rar(self, pde_name="ac"):
         key, self.key = random.split(self.key)
@@ -88,11 +88,11 @@ class Sampler:
         x = lhs_sampling(
             mins=[self.domain[0][0], self.domain[1][0]],
             maxs=[self.domain[0][1], self.domain[1][1]],
-            num=self.n_samples**2,
+            num=self.n_samples**2 * 5,
             key=key,
         )
         x_local = lhs_sampling(
-            mins=[-0.3, 0], maxs=[0.3, 0.15], num=self.n_samples**2 * 10, key=key
+            mins=[-0.4, 0], maxs=[0.4, 0.2], num=self.n_samples**2 * 10, key=key
         )
         x = jnp.concatenate([x, x_local], axis=0)
         t = jnp.zeros_like(x[:, 0:1])
@@ -160,11 +160,11 @@ class Sampler:
 
     def sample(self, pde_name="ac"):
         return (
-            self.sample_pde_rar(pde_name=pde_name),
+            self.sample_pde_rar(pde_name),
             self.sample_ic(),
             self.sample_bc(),
             self.sample_pde(),
-            # self.sample_flux(),
+            self.sample_flux(),
         )
 
 
@@ -217,7 +217,7 @@ class PFPINN(PINN):
                     jnp.sqrt(cfg.OMEGA_PHI)
                     / jnp.sqrt(2 * cfg.ALPHA_PHI)
                     * (r - 0.05)
-                    * cfg.Lc * 3
+                    * cfg.Lc
                 )
             )
             / 2
@@ -278,7 +278,7 @@ sampler = Sampler(
         "num": cfg.ADAPTIVE_SAMPLES,
     },
 )
-stagger = StaggerSwitch(pde_names=["ac", "ch", "ch"], stagger_period=cfg.STAGGER_PERIOD)
+stagger = StaggerSwitch(pde_names=["ac", "ch",], stagger_period=cfg.STAGGER_PERIOD)
 
 start_time = time.time()
 for epoch in range(cfg.EPOCHS):
@@ -330,12 +330,12 @@ for epoch in range(cfg.EPOCHS):
                 "loss/ic",
                 "loss/bc",
                 "loss/irr",
-                # "loss/flux",
+                "loss/flux",
                 f"weight/{pde_name}",
                 "weight/ic",
                 "weight/bc",
                 "weight/irr",
-                # "weight/flux",
+                "weight/flux",
                 "error/error",
             ],
             values=[weighted_loss, *loss_components, *weight_components, error],

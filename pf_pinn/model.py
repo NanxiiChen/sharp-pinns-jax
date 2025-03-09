@@ -1,4 +1,3 @@
-import sys
 from functools import partial
 from typing import Callable
 
@@ -26,7 +25,7 @@ class PINN(nn.Module):
             self.loss_ic,
             self.loss_bc,
             self.loss_irr,
-            # self.loss_flux,
+            self.loss_flux,
         ]
         self.pde_name = "ac"
         self.aux_vars = {}
@@ -42,7 +41,7 @@ class PINN(nn.Module):
             out_dim=self.cfg.OUT_DIM,
             fourier_emb=self.cfg.FOURIER_EMB,
             emb_scale=self.cfg.EMB_SCALE,
-            emb_dim=self.cfg.EMB_DIM
+            emb_dim=self.cfg.EMB_DIM,
         )
 
     @partial(jit, static_argnums=(0,))
@@ -60,6 +59,14 @@ class PINN(nn.Module):
 
     @partial(jit, static_argnums=(0,))
     def net_u(self, params, x, t):
+
+        # def one_sided(params, x, t):
+        #     return nn.tanh(self.model.apply(params, x, t)) / 2 + 0.5
+
+        # return (
+        #     one_sided(params, x, t) + one_sided(params, x * jnp.array([-1, 1]), t)
+        # ) / 2
+
         def hard_cons(params, x, t):
             phi, cl = nn.tanh(self.model.apply(params, x, t)) / 2 + 0.5
             cl = cl * (1 - self.cfg.CSE + self.cfg.CLE)
@@ -114,7 +121,7 @@ class PINN(nn.Module):
         dc_dt = jac_c_t(x, t)[0]
 
         # hess_phi_x, hess_c_x = jax.hessian(self.net_u, argnums=(1))(params, x, t)
-        
+
         # hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0], argnums=0)(x, t)
         # hess_c_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(x, t)
         hess_phi_x, hess_c_x = jax.hessian(self.net_u, argnums=(1))(params, x, t)
@@ -123,8 +130,7 @@ class PINN(nn.Module):
         lap_c = jnp.linalg.trace(hess_c_x)
 
         lap_h_phi = 6 * (
-            phi * (1 - phi) * lap_phi 
-            + (1 - 2 * phi) * jnp.sum(nabla_phi**2)
+            phi * (1 - phi) * lap_phi + (1 - 2 * phi) * jnp.sum(nabla_phi**2)
         )
 
         ch = dc_dt - CH1 * lap_c + CH1 * (self.cfg.CSE - self.cfg.CLE) * lap_h_phi
@@ -147,7 +153,6 @@ class PINN(nn.Module):
             x, t
         )[idx]
         return nabla_phi_part, nabla_c_part
-
 
     @partial(jit, static_argnums=(0,))
     def loss_pde(self, params, batch, eps):
@@ -221,15 +226,15 @@ class PINN(nn.Module):
         return jnp.sum(weights * losses), (losses, weights, aux_vars)
 
     @partial(jit, static_argnums=(0,))
-    def grad_norm_weights(self, grads: list, eps=1e-8):
+    def grad_norm_weights(self, grads: list, eps=1e-6):
         def tree_norm(pytree):
             squared_sum = sum(jnp.sum(x**2) for x in jax.tree_util.tree_leaves(pytree))
             return jnp.sqrt(squared_sum)
-        
+
         grad_norms = jnp.array([tree_norm(grad) for grad in grads])
 
         grad_norms = jnp.clip(grad_norms, eps, 1 / eps)
         weights = jnp.mean(grad_norms) / (grad_norms + eps)
         weights = jnp.nan_to_num(weights)
         weights = jnp.clip(weights, eps, 1 / eps)
-        return weights
+        return weights.at[1].set(weights[1] * 3)

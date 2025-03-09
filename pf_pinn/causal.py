@@ -9,7 +9,7 @@ class CausalWeightor:
 
         self.num_chunks = num_chunks
         self.t_range = t_range
-        self.bins = jnp.linspace(t_range[0], t_range[1]**(1/3), num_chunks + 1) ** 3
+        self.bins = jnp.linspace(t_range[0], t_range[1], num_chunks + 1)
         self.pde_name = pde_name
 
     @partial(jax.jit, static_argnums=(0,))
@@ -72,7 +72,7 @@ class CausalWeightor:
 def update_causal_eps(causal_weight, causal_configs, pde_name):
 
     if (
-        causal_weight.min() > causal_configs["max_last_weight"]
+        causal_weight[-1] > causal_configs["max_last_weight"]
         and causal_configs[pde_name + "_eps"] < causal_configs["max_eps"]
     ):
         causal_configs[pde_name + "_eps"] *= causal_configs["step_size"]
