@@ -20,6 +20,13 @@ This framework features a novel staggered training scheme and an enhanced neural
 <img src="./img/benchmarks.png" width="500">
 
 
+## Usage
+
+```bash
+python examples/corrosion2d2pits/main.py
+```
+
+
 ## Citation
 
 ```bibtex

@@ -16,9 +16,9 @@ import optax
 from flax.training import train_state
 from jax import jit, random, vmap
 
-current_dir = Path(__file__).resolve().parent  # 当前文件所在目录 (example1)
-project_root = current_dir.parent.parent  # 向上两级到 project_working_dir
-sys.path.append(str(project_root))  # 将根目录加入模块搜索路径
+current_dir = Path(__file__).resolve().parent
+project_root = current_dir.parent.parent
+sys.path.append(str(project_root))
 
 from pf_pinn import *
 from examples.corrosion2d2pits.configs import Config as cfg
