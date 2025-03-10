@@ -1,3 +1,8 @@
+"""
+Sharp-PINNs for pitting corrosion with 2d-2pits
+"""
+
+
 import datetime
 import sys
 import time

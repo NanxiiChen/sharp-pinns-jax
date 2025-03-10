@@ -182,6 +182,8 @@ class PINN(nn.Module):
         x, t = batch
         dphi_dt, dc_dt = vmap(self.net_speed, in_axes=(None, 0, 0))(params, x, t)
         return jnp.mean(jax.nn.relu(dphi_dt)) + jnp.mean(jax.nn.relu(dc_dt))
+        # return jnp.mean(jax.nn.softplus(dphi_dt)) + jnp.mean(jax.nn.softplus(dc_dt))
+        
 
     @partial(jit, static_argnums=(0,))
     def loss_flux(self, params, batch):

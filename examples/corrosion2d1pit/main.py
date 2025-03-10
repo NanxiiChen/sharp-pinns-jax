@@ -1,3 +1,7 @@
+"""
+Sharp-PINNs for pitting corrosion with 2d-1pit
+"""
+
 import datetime
 import sys
 import time
@@ -11,9 +15,9 @@ import optax
 from flax.training import train_state
 from jax import jit, random, vmap
 
-current_dir = Path(__file__).resolve().parent  # 当前文件所在目录 (example1)
-project_root = current_dir.parent.parent  # 向上两级到 project_working_dir
-sys.path.append(str(project_root))  # 将根目录加入模块搜索路径
+current_dir = Path(__file__).resolve().parent
+project_root = current_dir.parent.parent
+sys.path.append(str(project_root))
 
 from pf_pinn import *
 from examples.corrosion2d1pit.configs import Config as cfg
@@ -63,7 +67,7 @@ class Sampler:
         data = shifted_grid(
             self.mins,
             self.maxs,
-            [self.n_samples, self.n_samples, self.n_samples * 3],
+            [self.n_samples, self.n_samples, self.n_samples * 2],
             key,
         )
         return data[:, :-1], data[:, -1:]
@@ -232,7 +236,7 @@ sampler = Sampler(
         "num": cfg.ADAPTIVE_SAMPLES,
     },
 )
-stagger = StaggerSwitch(pde_names=["ac", "ch", "ch"], stagger_period=cfg.STAGGER_PERIOD)
+stagger = StaggerSwitch(pde_names=["ac", "ch"], stagger_period=cfg.STAGGER_PERIOD)
 
 start_time = time.time()
 for epoch in range(cfg.EPOCHS):

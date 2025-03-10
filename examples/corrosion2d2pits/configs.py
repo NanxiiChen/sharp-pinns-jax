@@ -1,10 +1,14 @@
+"""
+Sharp-PINNs for pitting corrosion with 2d-2pits
+"""
+
 class Config:
     EPOCHS = 100000
     N_SAMPLES = 15
     ADAPTIVE_SAMPLES = 6000
     ADAPTIVE_BASE_RATE = 5
     LR = 5e-4
-    DECAY = 0.8
+    DECAY = 0.9
     DECAY_EVERY = 100
     STAGGER_PERIOD = 25
     EMB_SCALE = (2.0, 0.4) # emb sacle for (x, t)
@@ -17,7 +21,7 @@ class Config:
     TS = [0.000, 2.360, 4.881, 9.984]
 
     NUM_LAYERS = 6
-    HIDDEN_DIM = 200
+    HIDDEN_DIM = 128
     OUT_DIM = 2
 
 
