@@ -7,11 +7,11 @@ class Config:
     N_SAMPLES = 20
     ADAPTIVE_SAMPLES = 8000
     ADAPTIVE_BASE_RATE = 5
-    LR = 1e-3
+    LR = 5e-4
     DECAY = 0.9
     DECAY_EVERY = 200
     STAGGER_PERIOD = 25
-    EMB_SCALE = (2, 1.0) # emb sacle for (x, t)
+    EMB_SCALE = (2.0, 1.0) # emb sacle for (x, t)
     EMB_DIM = 64
 
     DOMAIN = ((-0.4, 0.4), (-0.4, 0.4), (0, 0.4), (0, 1.0))
@@ -21,7 +21,7 @@ class Config:
     TS = [0.000, 1.968, 6.401, 9.357]
 
     NUM_LAYERS = 6
-    HIDDEN_DIM = 64
+    HIDDEN_DIM = 100
     OUT_DIM = 2
 
 

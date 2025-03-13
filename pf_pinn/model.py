@@ -25,7 +25,7 @@ class PINN(nn.Module):
             self.loss_ic,
             self.loss_bc,
             self.loss_irr,
-            self.loss_flux,
+            # self.loss_flux,
         ]
         self.pde_name = "ac"
         self.aux_vars = {}
@@ -239,4 +239,5 @@ class PINN(nn.Module):
         weights = jnp.mean(grad_norms) / (grad_norms + eps)
         weights = jnp.nan_to_num(weights)
         weights = jnp.clip(weights, eps, 1 / eps)
-        return weights.at[1].set(weights[1] * 3)
+        # return weights.at[1].set(weights[1] * 5)
+        return weights

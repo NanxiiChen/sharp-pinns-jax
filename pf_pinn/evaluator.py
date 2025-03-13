@@ -105,12 +105,12 @@ def evaluate3D(pinn, params, mesh, ref_path, ts, **kwargs):
         len(ts),
         2,
         figsize=(10, 3 * len(ts)),
-        subplot_kw={"projection": "3d", "box_aspect": (1, 1, 1)},
+        subplot_kw={"projection": "3d", "box_aspect": (2, 2, 1)},
     )
 
     xlim = kwargs.get("xlim", (-0.4, 0.4))
     ylim = kwargs.get("ylim", ((-0.4, 0.4)))
-    zlim = kwargs.get("zlim", ((0, 0.4)))
+    zlim = kwargs.get("zlim", ((0.4, 0)))
     Lc = kwargs.get("Lc", 1e-4)
     Tc = kwargs.get("Tc", 10.0)
 

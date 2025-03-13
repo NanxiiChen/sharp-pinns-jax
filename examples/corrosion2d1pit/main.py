@@ -204,8 +204,8 @@ class PFPINN(PINN):
     def ref_sol_bc(self, x, t):
         # x: (x1, x2)
         r = jnp.sqrt(x[:, 0]**2 + x[:, 1]**2)
-        phi = jnp.where(r < 0.05**2, 0, 1)
-        c = jnp.where(r < 0.05**2, 0, 1)
+        phi = (r > 0.05).astype(jnp.float32)
+        c = phi.copy()
         sol = jnp.stack([phi, c], axis=1)
         return jax.lax.stop_gradient(sol)
 

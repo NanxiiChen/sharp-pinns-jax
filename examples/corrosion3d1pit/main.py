@@ -97,7 +97,7 @@ class Sampler:
         x = lhs_sampling(
             mins=[self.domain[0][0], self.domain[1][0], self.domain[2][0]],
             maxs=[self.domain[0][1], self.domain[1][1], self.domain[2][1]],
-            num=1000,
+            num=4000,
             key=key,
         )
         x_local = lhs_sampling(
@@ -107,7 +107,7 @@ class Sampler:
                 0.2,
                 0.2,
             ],
-            num=2000,
+            num=4000,
             key=self.key,
         )
         x = jnp.concatenate([x, x_local], axis=0)
@@ -118,15 +118,15 @@ class Sampler:
         key, self.key = random.split(self.key)
 
         xyzts = lhs_sampling(
-            mins=[-0.04, -0.04, 0, self.domain[3][0] + self.domain[3][1] * 0.05],
-            maxs=[0.04, 0.04, 0.04, self.domain[3][1]],
-            num=self.n_samples**2 * 5,
+            mins=[-0.05, -0.05, 0, self.domain[3][0]],
+            maxs=[0.05, 0.05, 0.05, self.domain[3][1]],
+            num=self.n_samples**2 * 10,
             key=key,
         )
         yzts = lhs_sampling(
             mins=[self.domain[1][0], self.domain[2][0], self.domain[3][0]],
             maxs=[self.domain[1][1], self.domain[2][1], self.domain[3][1]],
-            num=self.n_samples**2,
+            num=self.n_samples*10,
             key=key,
         )
         xmin_yzts = jnp.concatenate(
@@ -146,7 +146,7 @@ class Sampler:
         xzts = lhs_sampling(
             mins=[self.domain[0][0], self.domain[2][0], self.domain[3][0]],
             maxs=[self.domain[0][1], self.domain[2][1], self.domain[3][1]],
-            num=self.n_samples**2,
+            num=self.n_samples*10,
             key=key,
         )
         ymin_xzts = jnp.concatenate(
@@ -168,7 +168,7 @@ class Sampler:
         xyts = lhs_sampling(
             mins=[self.domain[0][0], self.domain[1][0], self.domain[3][0]],
             maxs=[self.domain[0][1], self.domain[1][1], self.domain[3][1]],
-            num=self.n_samples**2,
+            num=self.n_samples*10,
             key=key,
         )
         # zmin_xyts = jnp.concatenate([
@@ -229,9 +229,9 @@ class PFPINN(PINN):
     @partial(jit, static_argnums=(0,))
     def ref_sol_bc(self, x, t):
         # x: (x1, x2)
-        r = jnp.sqrt(x[:, 0] ** 2 + x[:, 1] + x[:, 2] ** 2)
-        phi = jnp.where(r < 0.10**2, 0, 1)
-        c = jnp.where(r < 0.10**2, 0, 1)
+        r = jnp.sqrt(x[:, 0] ** 2 + x[:, 1] ** 2 + x[:, 2] ** 2)
+        phi = jnp.where(r < 0.10, 0, 1)
+        c = jnp.where(r < 0.10, 0, 1)
         sol = jnp.stack([phi, c], axis=1)
         return jax.lax.stop_gradient(sol)
 
