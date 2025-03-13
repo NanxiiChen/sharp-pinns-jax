@@ -3,7 +3,7 @@ import matplotlib
 import jax
 
 from .arch import MLP, ModifiedMLP
-from .evaluator import evaluate1D, evaluate2D
+from .evaluator import evaluate1D, evaluate2D, evaluate3D
 from .metrics import MetricsTracker
 from .sample import mesh_flat, lhs_sampling, shifted_grid
 from .causal import CausalWeightor, update_causal_eps

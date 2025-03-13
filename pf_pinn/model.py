@@ -73,10 +73,10 @@ class PINN(nn.Module):
             c = (self.cfg.CSE - self.cfg.CLE) * (-2 * phi**3 + 3 * phi**2) + cl
             return jnp.stack([phi, c], axis=0)
 
-        return (
-            hard_cons(params, x, t) + hard_cons(params, x * jnp.array([-1, 1]), t)
-        ) / 2
-        # return hard_cons(params, x, t)
+        # return (
+        #     hard_cons(params, x, t) + hard_cons(params, x * jnp.array([-1, 1]), t)
+        # ) / 2
+        return hard_cons(params, x, t)
 
     @partial(jit, static_argnums=(0,))
     def net_ac(self, params, x, t):

@@ -75,7 +75,12 @@ class Sampler:
 
     def sample_pde_rar(self, pde_name="ac"):
         key, self.key = random.split(self.key)
-        batch = lhs_sampling(self.mins, self.maxs, self.n_samples**3, key)
+        batch = shifted_grid(
+            self.mins,
+            self.maxs,
+            [self.n_samples*2, self.n_samples, self.n_samples * 3],
+            key,
+        )
 
         def residual_fn(batch):
             model = self.adaptive_kw["model"]
@@ -157,11 +162,11 @@ class Sampler:
             num=self.n_samples**2 // 2,
             key=key,
         )
-        top = jnp.concatenate(
+        data = jnp.concatenate(
             [x1t[:, 0:1], jnp.ones_like(x1t[:, 0:1]) * self.domain[1][0], x1t[:, 1:2]],
             axis=1,
         )
-        return top[:, :-1], top[:, -1:]
+        return data[:, :-1], data[:, -1:]
 
     def sample(self, pde_name="ac"):
         return (
