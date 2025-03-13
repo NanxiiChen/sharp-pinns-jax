@@ -21,7 +21,7 @@ class Config:
     TS = [0.000, 1.968, 6.401, 9.357]
 
     NUM_LAYERS = 6
-    HIDDEN_DIM = 64
+    HIDDEN_DIM = 128
     OUT_DIM = 2
 
 
