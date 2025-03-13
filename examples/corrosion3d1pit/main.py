@@ -120,13 +120,13 @@ class Sampler:
         xyzts = lhs_sampling(
             mins=[-0.05, -0.05, 0, self.domain[3][0]],
             maxs=[0.05, 0.05, 0.05, self.domain[3][1]],
-            num=self.n_samples**2 * 10,
+            num=self.n_samples**2 * 5,
             key=key,
         )
         yzts = lhs_sampling(
             mins=[self.domain[1][0], self.domain[2][0], self.domain[3][0]],
             maxs=[self.domain[1][1], self.domain[2][1], self.domain[3][1]],
-            num=self.n_samples*10,
+            num=self.n_samples * 5,
             key=key,
         )
         xmin_yzts = jnp.concatenate(
@@ -146,7 +146,7 @@ class Sampler:
         xzts = lhs_sampling(
             mins=[self.domain[0][0], self.domain[2][0], self.domain[3][0]],
             maxs=[self.domain[0][1], self.domain[2][1], self.domain[3][1]],
-            num=self.n_samples*10,
+            num=self.n_samples * 5,
             key=key,
         )
         ymin_xzts = jnp.concatenate(
@@ -168,7 +168,7 @@ class Sampler:
         xyts = lhs_sampling(
             mins=[self.domain[0][0], self.domain[1][0], self.domain[3][0]],
             maxs=[self.domain[0][1], self.domain[1][1], self.domain[3][1]],
-            num=self.n_samples*10,
+            num=self.n_samples * 5,
             key=key,
         )
         # zmin_xyts = jnp.concatenate([
@@ -225,6 +225,12 @@ def train_step(state, batch, eps):
 class PFPINN(PINN):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.loss_fn_panel = [
+            pinn.loss_pde,
+            pinn.loss_ic,
+            pinn.loss_bc,
+            pinn.loss_irr,
+        ]
 
     @partial(jit, static_argnums=(0,))
     def ref_sol_bc(self, x, t):
@@ -258,12 +264,7 @@ class PFPINN(PINN):
 
 
 pinn = PFPINN(config=cfg)
-pinn.loss_fn_panel = [
-    pinn.loss_pde,
-    pinn.loss_ic,
-    pinn.loss_bc,
-    pinn.loss_irr,
-]
+
 
 init_key = random.PRNGKey(0)
 model_key, sampler_key = random.split(init_key)
@@ -320,6 +321,9 @@ for epoch in range(cfg.EPOCHS):
             ts=cfg.TS,
             Lc=cfg.Lc,
             Tc=cfg.Tc,
+            xlim=cfg.DOMAIN[0],
+            ylim=cfg.DOMAIN[1],
+            zlim=cfg.DOMAIN[2],
         )
 
         print(

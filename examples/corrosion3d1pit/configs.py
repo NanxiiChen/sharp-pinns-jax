@@ -11,24 +11,24 @@ class Config:
     DECAY = 0.9
     DECAY_EVERY = 200
     STAGGER_PERIOD = 25
-    EMB_SCALE = (2.0, 1.0) # emb sacle for (x, t)
+    EMB_SCALE = (1.5, 2.0) # emb sacle for (x, t)
     EMB_DIM = 64
 
-    DOMAIN = ((-0.4, 0.4), (-0.4, 0.4), (0, 0.4), (0, 1.0))
+    DOMAIN = ((-0.5, 0.5), (-0.5, 0.5), (0, 0.5), (0, 1.0))
     DATA_PATH = "./data/3d-1pit/"
     LOG_DIR = "/root/tf-logs"
     PREFIX = "3d-1pit"
     TS = [0.000, 1.968, 6.401, 9.357]
 
     NUM_LAYERS = 6
-    HIDDEN_DIM = 100
+    HIDDEN_DIM = 64
     OUT_DIM = 2
 
 
     ACT_NAME = "tanh"
     ARCH_NAME = "modified_mlp"
     FOURIER_EMB = True
-    CAUSAL_WEIGHT = False
+    CAUSAL_WEIGHT = True
 
     ALPHA_PHI = 1.03e-4
     OMEGA_PHI = 1.76e7
