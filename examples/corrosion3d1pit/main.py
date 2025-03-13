@@ -226,10 +226,10 @@ class PFPINN(PINN):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.loss_fn_panel = [
-            pinn.loss_pde,
-            pinn.loss_ic,
-            pinn.loss_bc,
-            pinn.loss_irr,
+            self.loss_pde,
+            self.loss_ic,
+            self.loss_bc,
+            self.loss_irr,
         ]
 
     @partial(jit, static_argnums=(0,))
