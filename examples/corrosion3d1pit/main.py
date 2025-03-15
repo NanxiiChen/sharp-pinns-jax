@@ -235,15 +235,15 @@ class PFPINN(PINN):
     @partial(jit, static_argnums=(0,))
     def ref_sol_bc(self, x, t):
         # x: (x1, x2)
-        r = jnp.sqrt(x[:, 0] ** 2 + x[:, 1] ** 2 + x[:, 2] ** 2)
+        r = jnp.sqrt(x[0] ** 2 + x[1] ** 2 + x[2] ** 2)
         phi = jnp.where(r < 0.10, 0, 1)
         c = jnp.where(r < 0.10, 0, 1)
-        sol = jnp.stack([phi, c], axis=1)
+        sol = jnp.stack([phi, c], axis=-1)
         return jax.lax.stop_gradient(sol)
 
     @partial(jit, static_argnums=(0,))
     def ref_sol_ic(self, x, t):
-        r = jnp.sqrt(x[:, 0] ** 2 + x[:, 1] ** 2 + x[:, 2] ** 2)
+        r = jnp.sqrt(x[0] ** 2 + x[1] ** 2 + x[2] ** 2)
         phi = (
             1
             - (
@@ -259,7 +259,7 @@ class PFPINN(PINN):
         )
         h_phi = -2 * phi**3 + 3 * phi**2
         c = h_phi * cfg.CSE + (1 - h_phi) * 0.0
-        sol = jnp.stack([phi, c], axis=1)
+        sol = jnp.stack([phi, c], axis=-1)
         return jax.lax.stop_gradient(sol)
 
 

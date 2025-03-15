@@ -25,7 +25,7 @@ class PINN(nn.Module):
             self.loss_ic,
             self.loss_bc,
             self.loss_irr,
-            # self.loss_flux,
+            self.loss_flux,
         ]
         self.pde_name = "ac"
         self.aux_vars = {}
@@ -73,10 +73,10 @@ class PINN(nn.Module):
             c = (self.cfg.CSE - self.cfg.CLE) * (-2 * phi**3 + 3 * phi**2) + cl
             return jnp.stack([phi, c], axis=0)
 
-        # return (
-        #     hard_cons(params, x, t) + hard_cons(params, x * jnp.array([-1, 1]), t)
-        # ) / 2
-        return hard_cons(params, x, t)
+        return (
+            hard_cons(params, x, t) + hard_cons(params, x * jnp.array([-1, 1]), t)
+        ) / 2
+        # return hard_cons(params, x, t)
 
     @partial(jit, static_argnums=(0,))
     def net_ac(self, params, x, t):
@@ -169,13 +169,15 @@ class PINN(nn.Module):
     def loss_ic(self, params, batch):
         x, t = batch
         u = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
-        return jnp.mean((u - self.ref_sol_ic(x, t)) ** 2)
+        ref = vmap(self.ref_sol_ic, in_axes=(0, 0))(x, t)
+        return jnp.mean((u - ref) ** 2)
 
     @partial(jit, static_argnums=(0,))
     def loss_bc(self, params, batch):
         x, t = batch
         u = vmap(self.net_u, in_axes=(None, 0, 0))(params, x, t)
-        return jnp.mean((u - self.ref_sol_bc(x, t)) ** 2)
+        ref = vmap(self.ref_sol_bc, in_axes=(0, 0))(x, t)
+        return jnp.mean((u - ref) ** 2)
 
     @partial(jit, static_argnums=(0,))
     def loss_irr(self, params, batch):
@@ -223,7 +225,6 @@ class PINN(nn.Module):
         losses, grads, aux_vars = self.compute_losses_and_grads(params, batch, eps)
 
         weights = self.grad_norm_weights(grads)
-        weights = jax.lax.stop_gradient(weights)
 
         return jnp.sum(weights * losses), (losses, weights, aux_vars)
 
@@ -239,5 +240,5 @@ class PINN(nn.Module):
         weights = jnp.mean(grad_norms) / (grad_norms + eps)
         weights = jnp.nan_to_num(weights)
         weights = jnp.clip(weights, eps, 1 / eps)
-        # return weights.at[1].set(weights[1] * 5)
-        return weights
+        weights = weights.at[1].set(weights[1] * 5)
+        return jax.lax.stop_gradient(weights)

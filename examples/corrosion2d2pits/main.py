@@ -208,17 +208,15 @@ class PFPINN(PINN):
     @partial(jit, static_argnums=(0,))
     def ref_sol_bc(self, x, t):
         # x: (x1, x2)
-        r = jnp.sqrt((jnp.abs(x[:, 0]) - 0.15) ** 2 + x[:, 1] ** 2)
-        # phi = jnp.where(r < 0.05**2, 0, 1)
-        # c = jnp.where(r < 0.05**2, 0, 1)
+        r = jnp.sqrt((jnp.abs(x[0]) - 0.15) ** 2 + x[1] ** 2)
         phi = (r > 0.05).astype(jnp.float32)
         c = phi.copy()
-        sol = jnp.stack([phi, c], axis=1)
+        sol = jnp.stack([phi, c], axis=-1)
         return jax.lax.stop_gradient(sol)
 
     @partial(jit, static_argnums=(0,))
     def ref_sol_ic(self, x, t):
-        r = jnp.sqrt((jnp.abs(x[:, 0]) - 0.15) ** 2 + x[:, 1] ** 2)
+        r = jnp.sqrt((jnp.abs(x[0]) - 0.15) ** 2 + x[1] ** 2)
         phi = (
             1
             - (
@@ -234,36 +232,8 @@ class PFPINN(PINN):
         )
         h_phi = -2 * phi**3 + 3 * phi**2
         c = h_phi * cfg.CSE + (1 - h_phi) * 0.0
-        sol = jnp.stack([phi, c], axis=1)
+        sol = jnp.stack([phi, c], axis=-1)
         return jax.lax.stop_gradient(sol)
-    
-    # @partial(jit, static_argnums=(0,))
-    # def net_u(self, params, x, t):
-    #     # init_sol = self.ref_sol_ic(x, t)
-    #     def init_sol_fn(x, t):
-    #         r = jnp.sqrt((jnp.abs(x[0]) - 0.15) ** 2 + x[1] ** 2)
-    #         phi = (
-    #             1
-    #             - (
-    #                 1
-    #                 - jnp.tanh(
-    #                     jnp.sqrt(cfg.OMEGA_PHI)
-    #                     / jnp.sqrt(2 * cfg.ALPHA_PHI)
-    #                     * (r - 0.05)
-    #                     * cfg.Lc * 4
-    #                 )
-    #             )
-    #             / 2
-    #         )
-    #         h_phi = -2 * phi**3 + 3 * phi**2
-    #         c = h_phi * cfg.CSE + (1 - h_phi) * 0.0
-    #         sol = jnp.stack([phi, c], axis=-1)
-    #         return jax.lax.stop_gradient(sol)
-    #     init_sol = init_sol_fn(x, t)
-        
-    #     change = self.model.apply(params, x, t)
-    #     return init_sol + change * t
-        
         
 
 
