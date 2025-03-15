@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import optax
 from flax.training import train_state
 from jax import jit, random, vmap
+import orbax.checkpoint as ocp
 
 current_dir = Path(__file__).resolve().parent
 project_root = current_dir.parent.parent
@@ -247,6 +248,7 @@ state = create_train_state(
 now = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 log_path = f"{cfg.LOG_DIR}/{cfg.PREFIX}/{now}"
 metrics_tracker = MetricsTracker(log_path)
+ckpt = ocp.StandardCheckpointer()
 sampler = Sampler(
     cfg.N_SAMPLES,
     domain=cfg.DOMAIN,
@@ -280,11 +282,7 @@ for epoch in range(cfg.EPOCHS):
 
     if epoch % cfg.STAGGER_PERIOD == 0:
 
-        # save the model
-        params = state.params
-        model_path = f"{log_path}/model-{epoch}.npz"
-        params = jax.device_get(params)
-        jnp.savez(model_path, **params)
+        ckpt.save(log_path + f"/model-{epoch}", state)
 
         fig, error = evaluate2D(
             pinn,
