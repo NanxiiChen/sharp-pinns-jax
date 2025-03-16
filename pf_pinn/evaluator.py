@@ -105,12 +105,18 @@ def evaluate3D(pinn, params, mesh, ref_path, ts, **kwargs):
         len(ts),
         2,
         figsize=(10, 3 * len(ts)),
-        subplot_kw={"projection": "3d", "box_aspect": (2, 2, 1)},
+        subplot_kw={"projection": "3d", "box_aspect": kwargs.get("box_aspect", (2, 2, 1))},
     )
 
     xlim = kwargs.get("xlim", (-0.4, 0.4))
     ylim = kwargs.get("ylim", ((-0.4, 0.4)))
     zlim = kwargs.get("zlim", ((0, 0.4)))
+    
+    # clip the mesh to the domain
+    mesh = mesh[(mesh[:, 0] >= xlim[0]) & (mesh[:, 0] <= xlim[1])]
+    mesh = mesh[(mesh[:, 1] >= ylim[0]) & (mesh[:, 1] <= ylim[1])]
+    mesh = mesh[(mesh[:, 2] >= zlim[0]) & (mesh[:, 2] <= zlim[1])]
+    
     Lc = kwargs.get("Lc", 1e-4)
     Tc = kwargs.get("Tc", 10.0)
 
