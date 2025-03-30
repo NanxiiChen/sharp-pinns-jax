@@ -17,7 +17,7 @@ class Config:
     DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 1]]
     DATA_PATH = "./data/2d-2pits/"
     LOG_DIR = "/root/tf-logs"
-    PREFIX = "2d-2pits"
+    PREFIX = "corrosion/2d-2pits/"
     TS = [0.000, 2.360, 4.881, 9.984]
 
     NUM_LAYERS = 6
@@ -27,6 +27,7 @@ class Config:
 
     ACT_NAME = "tanh"
     ARCH_NAME = "modified_mlp"
+    ASYMMETRIC = True
     FOURIER_EMB = True
     CAUSAL_WEIGHT = True
 

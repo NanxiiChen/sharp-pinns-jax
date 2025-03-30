@@ -17,7 +17,7 @@ class Config:
     DOMAIN = ((-0.5, 0.5), (-0.5, 0.5), (0, 0.5), (0, 1.0))
     DATA_PATH = "./data/3d-1pit/"
     LOG_DIR = "/root/tf-logs"
-    PREFIX = "3d-1pit"
+    PREFIX = "corrosion/3d-1pit/"
     TS = [0.000, 1.968, 6.401, 9.357]
 
     NUM_LAYERS = 6
@@ -27,6 +27,7 @@ class Config:
 
     ACT_NAME = "tanh"
     ARCH_NAME = "modified_mlp"
+    ASYMMETRIC = False
     FOURIER_EMB = True
     CAUSAL_WEIGHT = True
 

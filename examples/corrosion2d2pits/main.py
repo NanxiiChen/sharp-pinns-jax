@@ -2,7 +2,6 @@
 Sharp-PINNs for pitting corrosion with 2d-2pits
 """
 
-
 import datetime
 import sys
 import time
@@ -12,8 +11,6 @@ from pathlib import Path
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
-import optax
-from flax.training import train_state
 from jax import jit, random, vmap
 import orbax.checkpoint as ocp
 
@@ -69,7 +66,7 @@ class Sampler:
         data = shifted_grid(
             self.mins,
             self.maxs,
-            [self.n_samples*2, self.n_samples, self.n_samples * 3],
+            [self.n_samples * 2, self.n_samples, self.n_samples * 3],
             key,
         )
         return data[:, :-1], data[:, -1:]
@@ -79,7 +76,7 @@ class Sampler:
         batch = shifted_grid(
             self.mins,
             self.maxs,
-            [self.n_samples*2, self.n_samples, self.n_samples * 3],
+            [self.n_samples * 2, self.n_samples, self.n_samples * 3],
             key,
         )
 
@@ -175,31 +172,7 @@ class Sampler:
             self.sample_ic(),
             self.sample_bc(),
             self.sample_pde(),
-            self.sample_flux(),
         )
-
-
-def create_train_state(model, rng, lr, **kwargs):
-    decay = kwargs.get("decay", 0.9)
-    decay_every = kwargs.get("decay_every", 1000)
-    params = model.init(rng, jnp.ones(2), jnp.ones(1))
-    scheduler = optax.exponential_decay(lr, decay_every, decay, staircase=True)
-    optimizer = optax.adam(scheduler)
-    return train_state.TrainState.create(
-        apply_fn=model.apply,
-        params=params,
-        tx=optimizer,
-    )
-
-
-@jit
-def train_step(state, batch, eps):
-    params = state.params
-    (weighted_loss, (loss_components, weight_components, aux_vars)), grads = (
-        jax.value_and_grad(pinn.loss_fn, has_aux=True, argnums=0)(params, batch, eps)
-    )
-    new_state = state.apply_gradients(grads=grads)
-    return new_state, (weighted_loss, loss_components, weight_components, aux_vars)
 
 
 class PFPINN(PINN):
@@ -235,7 +208,6 @@ class PFPINN(PINN):
         c = h_phi * cfg.CSE + (1 - h_phi) * 0.0
         sol = jnp.stack([phi, c], axis=-1)
         return jax.lax.stop_gradient(sol)
-        
 
 
 pinn = PFPINN(config=cfg)
@@ -243,7 +215,12 @@ pinn = PFPINN(config=cfg)
 init_key = random.PRNGKey(0)
 model_key, sampler_key = random.split(init_key)
 state = create_train_state(
-    pinn.model, model_key, cfg.LR, decay=cfg.DECAY, decay_every=cfg.DECAY_EVERY
+    pinn.model,
+    model_key,
+    cfg.LR,
+    decay=cfg.DECAY,
+    decay_every=cfg.DECAY_EVERY,
+    xdim=len(cfg.DOMAIN) - 1,
 )
 now = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 log_path = f"{cfg.LOG_DIR}/{cfg.PREFIX}/{now}"
@@ -260,13 +237,17 @@ sampler = Sampler(
         "num": cfg.ADAPTIVE_SAMPLES,
     },
 )
-stagger = StaggerSwitch(pde_names=["ac", "ch",], stagger_period=cfg.STAGGER_PERIOD)
+stagger = StaggerSwitch(
+    pde_names=[
+        "ac",
+        "ch",
+    ],
+    stagger_period=cfg.STAGGER_PERIOD,
+)
 
 start_time = time.time()
 for epoch in range(cfg.EPOCHS):
     pde_name = stagger.decide_pde()
-    pinn.pde_name = pde_name
-    pinn.causal_weightor.pde_name = pde_name
 
     if epoch % cfg.STAGGER_PERIOD == 0:
         sampler.adaptive_kw["params"].update(state.params)
@@ -274,7 +255,11 @@ for epoch in range(cfg.EPOCHS):
         print(f"Epoch: {epoch}, PDE: {pde_name}")
 
     state, (weighted_loss, loss_components, weight_components, aux_vars) = train_step(
-        state, batch, cfg.CAUSAL_CONFIGS[pde_name + "_eps"]
+        pinn.loss_fn,
+        state,
+        batch,
+        cfg.CAUSAL_CONFIGS[pde_name + "_eps"],
+        pde_name,
     )
     if cfg.CAUSAL_WEIGHT:
         update_causal_eps(aux_vars["causal_weights"], cfg.CAUSAL_CONFIGS, pde_name)
@@ -308,12 +293,10 @@ for epoch in range(cfg.EPOCHS):
                 "loss/ic",
                 "loss/bc",
                 "loss/irr",
-                "loss/flux",
                 f"weight/{pde_name}",
                 "weight/ic",
                 "weight/bc",
                 "weight/irr",
-                "weight/flux",
                 "error/error",
             ],
             values=[weighted_loss, *loss_components, *weight_components, error],

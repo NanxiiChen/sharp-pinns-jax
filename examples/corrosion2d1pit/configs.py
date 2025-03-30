@@ -11,13 +11,13 @@ class Config:
     DECAY = 0.9
     DECAY_EVERY = 200
     STAGGER_PERIOD = 25
-    EMB_SCALE = (1.5, 0.5) # emb sacle for (x, t)
+    EMB_SCALE = (1.0, 0.3) # emb sacle for (x, t)
     EMB_DIM = 64
 
     DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 2.0]]
     DATA_PATH = "./data/2d-1pit/"
     LOG_DIR = "/root/tf-logs"
-    PREFIX = "2d-1pit"
+    PREFIX = "corrosion/2d-1pit/"
     TS = [0.000, 3.582, 9.726, 19.966]
 
     NUM_LAYERS = 6
@@ -27,8 +27,9 @@ class Config:
 
     ACT_NAME = "tanh"
     ARCH_NAME = "modified_mlp"
+    ASYMMETRIC = True
     FOURIER_EMB = True
-    CAUSAL_WEIGHT = False
+    CAUSAL_WEIGHT = True
 
     ALPHA_PHI = 1.03e-4
     OMEGA_PHI = 1.76e7
