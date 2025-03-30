@@ -253,7 +253,7 @@ class PINN(nn.Module):
         return jnp.sum(weights * losses), (losses, weights, aux_vars)
 
     @partial(jit, static_argnums=(0,))
-    def grad_norm_weights(self, grads: list, eps=1e-6):
+    def grad_norm_weights(self, grads: list, eps=1e-8):
         def tree_norm(pytree):
             squared_sum = sum(jnp.sum(x**2) for x in jax.tree_util.tree_leaves(pytree))
             return jnp.sqrt(squared_sum)
@@ -264,5 +264,5 @@ class PINN(nn.Module):
         weights = jnp.mean(grad_norms) / (grad_norms + eps)
         weights = jnp.nan_to_num(weights)
         weights = jnp.clip(weights, eps, 1 / eps)
-        weights = weights.at[1].set(weights[1] * 3)
+        weights = weights.at[1].set(weights[1] * 5)
         return jax.lax.stop_gradient(weights)
