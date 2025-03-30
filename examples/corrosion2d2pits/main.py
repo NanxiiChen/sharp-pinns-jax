@@ -262,7 +262,15 @@ for epoch in range(cfg.EPOCHS):
         pde_name,
     )
     if cfg.CAUSAL_WEIGHT:
-        update_causal_eps(aux_vars["causal_weights"], cfg.CAUSAL_CONFIGS, pde_name)
+        # update_causal_eps(aux_vars["causal_weights"], cfg.CAUSAL_CONFIGS, pde_name)
+        cfg.CAUSAL_CONFIGS.update(
+            update_causal_eps(
+                aux_vars["causal_weights"],
+                cfg.CAUSAL_CONFIGS,
+                pde_name,
+            )
+        )
+        
     stagger.step_epoch()
 
     if epoch % cfg.STAGGER_PERIOD == 0:

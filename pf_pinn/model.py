@@ -27,11 +27,9 @@ class PINN(nn.Module):
             # self.loss_flux,
             self.loss_irr,
         ]
-        self.pde_name = "ac"
-        self.aux_vars = {}
         self.causal_weightor = CausalWeightor(
             num_chunks=self.cfg.CAUSAL_CONFIGS["chunks"],
-            t_range=(0.0, 1.0),
+            t_range=self.cfg.DOMAIN[-1],
         )
         arch = {"mlp": MLP, "modified_mlp": ModifiedMLP}
         self.model = arch[self.cfg.ARCH_NAME](
@@ -127,7 +125,7 @@ class PINN(nn.Module):
 
         # hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0], argnums=0)(x, t)
         # hess_c_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[1], argnums=0)(x, t)
-        hess_phi_x, hess_c_x = jax.hessian(self.net_u, argnums=(1))(params, x, t)
+        hess_phi_x, hess_c_x = jax.hessian(self.net_u, argnums=1)(params, x, t)
 
         lap_phi = jnp.linalg.trace(hess_phi_x)
         lap_c = jnp.linalg.trace(hess_c_x)

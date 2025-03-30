@@ -70,16 +70,19 @@ class CausalWeightor:
 
 def update_causal_eps(causal_weight, causal_configs, pde_name):
 
+    new_causal_configs = causal_configs.copy()
     if (
         causal_weight[-1] > causal_configs["max_last_weight"]
         and causal_configs[pde_name + "_eps"] < causal_configs["max_eps"]
     ):
-        causal_configs[pde_name + "_eps"] *= causal_configs["step_size"]
-        print(f"Inc. eps to {causal_configs[pde_name + '_eps']}")
+        new_causal_configs[pde_name + "_eps"] *= causal_configs["step_size"]
+        print(f"Inc. eps to {new_causal_configs[pde_name + '_eps']}")
 
     if jnp.mean(causal_weight) < causal_configs["min_mean_weight"]:
-        causal_configs[pde_name + "_eps"] /= causal_configs["step_size"]
-        print(f"Dec. eps to {causal_configs[pde_name + '_eps']}")
+        new_causal_configs[pde_name + "_eps"] /= causal_configs["step_size"]
+        print(f"Dec. eps to {new_causal_configs[pde_name + '_eps']}")
+        
+    return new_causal_configs
 
 
 if __name__ == "__main__":
