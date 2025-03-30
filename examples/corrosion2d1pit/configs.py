@@ -14,11 +14,11 @@ class Config:
     EMB_SCALE = (2.0, 0.5) # emb sacle for (x, t)
     EMB_DIM = 64
 
-    DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 2.0]]
+    DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 1.0]]
     DATA_PATH = "./data/2d-1pit/"
     LOG_DIR = "/root/tf-logs"
     PREFIX = "corrosion/2d-1pit/"
-    TS = [0.000, 3.582, 9.726, 19.966]
+    TS = [0.000, 2.046, 5.118, 9.726,]
 
     NUM_LAYERS = 6
     HIDDEN_DIM = 128

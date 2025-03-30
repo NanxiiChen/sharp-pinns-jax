@@ -167,7 +167,7 @@ class Sampler:
             self.sample_pde_rar(pde_name=pde_name),
             self.sample_ic(),
             self.sample_bc(),
-            # self.sample_flux(),
+            self.sample_flux(),
             self.sample_pde(),
         )
 
@@ -175,6 +175,7 @@ class Sampler:
 class PFPINN(PINN):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.flux_idx = 1
 
     @partial(jit, static_argnums=(0,))
     def ref_sol_bc(self, x, t):
@@ -239,21 +240,27 @@ stagger = StaggerSwitch(pde_names=["ac", "ch"], stagger_period=cfg.STAGGER_PERIO
 start_time = time.time()
 for epoch in range(cfg.EPOCHS):
     pde_name = stagger.decide_pde()
-
+    loss_fn = pinn.loss_fn_ac if pde_name == "ac" else pinn.loss_fn_ch
+    
     if epoch % cfg.STAGGER_PERIOD == 0:
         sampler.adaptive_kw["params"].update(state.params)
         batch = sampler.sample(pde_name=pde_name)
         print(f"Epoch: {epoch}, PDE: {pde_name}")
 
     state, (weighted_loss, loss_components, weight_components, aux_vars) = train_step(
-        pinn.loss_fn,
+        loss_fn,
         state,
         batch,
         cfg.CAUSAL_CONFIGS[pde_name + "_eps"],
-        pde_name
     )
     if cfg.CAUSAL_WEIGHT:
-        update_causal_eps(aux_vars["causal_weights"], cfg.CAUSAL_CONFIGS, pde_name)
+        cfg.CAUSAL_CONFIGS.update(
+            update_causal_eps(
+                aux_vars["causal_weights"],
+                cfg.CAUSAL_CONFIGS,
+                pde_name,
+            )
+        )
     stagger.step_epoch()
 
     if epoch % cfg.STAGGER_PERIOD == 0:
@@ -284,13 +291,13 @@ for epoch in range(cfg.EPOCHS):
                 f"loss/{pde_name}",
                 "loss/ic",
                 "loss/bc",
+                "loss/flux",
                 "loss/irr",
-                # "loss/flux",
                 f"weight/{pde_name}",
                 "weight/ic",
                 "weight/bc",
+                "weight/flux",
                 "weight/irr",
-                # "weight/flux",
                 "error/error",
             ],
             values=[weighted_loss, *loss_components, *weight_components, error],

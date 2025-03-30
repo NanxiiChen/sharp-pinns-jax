@@ -32,18 +32,18 @@ class Sampler:
         self,
         n_samples,
         domain=((-0.5, 0.5), (0, 0.5), (0, 1)),
-        key=random.PRNGKey(0),
-        adaptive_kw={
+        key=None,
+        adaptive_kw=None,
+    ):
+        self.n_samples = n_samples
+        self.domain = domain
+        self.key = key if key is not None else random.PRNGKey(0)
+        self.adaptive_kw = adaptive_kw if adaptive_kw is not None else {
             "ratio": 10,
             "num": 5000,
             "model": None,
             "state": None,
-        },
-    ):
-        self.n_samples = n_samples
-        self.domain = domain
-        self.adaptive_kw = adaptive_kw
-        self.key = key
+        }
         self.mins = [d[0] for d in domain]
         self.maxs = [d[1] for d in domain]
 
@@ -66,7 +66,7 @@ class Sampler:
         data = shifted_grid(
             self.mins,
             self.maxs,
-            [self.n_samples, self.n_samples, self.n_samples * 3],
+            [self.n_samples, self.n_samples, self.n_samples * 2],
             key,
         )
         return data[:, :-1], data[:, -1:]
@@ -76,7 +76,7 @@ class Sampler:
         batch = shifted_grid(
             self.mins,
             self.maxs,
-            [self.n_samples, self.n_samples, self.n_samples * 3],
+            [self.n_samples, self.n_samples, self.n_samples * 2],
             key,
         )
 
@@ -171,6 +171,7 @@ class Sampler:
             self.sample_pde_rar(pde_name),
             self.sample_ic(),
             self.sample_bc(),
+            self.sample_flux(),
             self.sample_pde(),
         )
 
@@ -178,6 +179,7 @@ class Sampler:
 class PFPINN(PINN):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.flux_idx = 1
 
     @partial(jit, static_argnums=(0,))
     def ref_sol_bc(self, x, t):
@@ -248,19 +250,20 @@ stagger = StaggerSwitch(
 start_time = time.time()
 for epoch in range(cfg.EPOCHS):
     pde_name = stagger.decide_pde()
+    loss_fn = pinn.loss_fn_ac if pde_name == "ac" else pinn.loss_fn_ch
 
     if epoch % cfg.STAGGER_PERIOD == 0:
-        sampler.adaptive_kw["params"].update(state.params)
+        # sampler.adaptive_kw["params"].update(state.params)
         batch = sampler.sample(pde_name=pde_name)
         print(f"Epoch: {epoch}, PDE: {pde_name}")
 
     state, (weighted_loss, loss_components, weight_components, aux_vars) = train_step(
-        pinn.loss_fn,
+        loss_fn,
         state,
         batch,
         cfg.CAUSAL_CONFIGS[pde_name + "_eps"],
-        pde_name,
     )
+    
     if cfg.CAUSAL_WEIGHT:
         # update_causal_eps(aux_vars["causal_weights"], cfg.CAUSAL_CONFIGS, pde_name)
         cfg.CAUSAL_CONFIGS.update(
@@ -270,7 +273,6 @@ for epoch in range(cfg.EPOCHS):
                 pde_name,
             )
         )
-        
     stagger.step_epoch()
 
     if epoch % cfg.STAGGER_PERIOD == 0:
@@ -300,10 +302,12 @@ for epoch in range(cfg.EPOCHS):
                 f"loss/{pde_name}",
                 "loss/ic",
                 "loss/bc",
+                "loss/flux",
                 "loss/irr",
                 f"weight/{pde_name}",
                 "weight/ic",
                 "weight/bc",
+                "weight/flux",
                 "weight/irr",
                 "error/error",
             ],
