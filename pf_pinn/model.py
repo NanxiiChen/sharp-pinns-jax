@@ -177,12 +177,18 @@ class PINN(nn.Module):
 
     @partial(jit, static_argnums=(0,4))
     def loss_pde(self, params, batch, eps, pde_name:str):
-        return jax.lax.cond(
-            pde_name == "ac",
-            lambda _: self.loss_ac(params, batch, eps),
-            lambda _: self.loss_ch(params, batch, eps),
-            operand=None
-        )
+        if pde_name == "ac":
+            return self.loss_ac(params, batch, eps)
+        elif pde_name == "ch":
+            return self.loss_ch(params, batch, eps)
+        else:
+            raise ValueError(f"Unknown PDE name: {pde_name}")
+        # return jax.lax.cond(
+        #     pde_name == "ac",
+        #     lambda _: self.loss_ac(params, batch, eps),
+        #     lambda _: self.loss_ch(params, batch, eps),
+        #     operand=None
+        # )
 
     @partial(jit, static_argnums=(0,))
     def loss_ic(self, params, batch):
@@ -258,5 +264,5 @@ class PINN(nn.Module):
         weights = jnp.mean(grad_norms) / (grad_norms + eps)
         weights = jnp.nan_to_num(weights)
         weights = jnp.clip(weights, eps, 1 / eps)
-        # weights = weights.at[1].set(weights[1] * 3)
+        weights = weights.at[1].set(weights[1] * 3)
         return jax.lax.stop_gradient(weights)

@@ -66,7 +66,7 @@ class Sampler:
         data = shifted_grid(
             self.mins,
             self.maxs,
-            [self.n_samples * 2, self.n_samples, self.n_samples * 3],
+            [self.n_samples, self.n_samples, self.n_samples * 3],
             key,
         )
         return data[:, :-1], data[:, -1:]
@@ -76,7 +76,7 @@ class Sampler:
         batch = shifted_grid(
             self.mins,
             self.maxs,
-            [self.n_samples * 2, self.n_samples, self.n_samples * 3],
+            [self.n_samples, self.n_samples, self.n_samples * 3],
             key,
         )
 

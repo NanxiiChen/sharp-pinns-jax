@@ -11,7 +11,7 @@ class Dense(nn.Module):
     in_features: int
     out_features: int
     kernel_init: Callable = glorot_normal()
-    bias_init: Callable = zeros
+    bias_init: Callable = constant(0.1)
 
     def setup(self):
         self.kernel = self.param('kernel', self.kernel_init,

@@ -25,7 +25,7 @@ class Config:
     OUT_DIM = 2
 
 
-    ACT_NAME = "tanh"
+    ACT_NAME = "gelu"
     ARCH_NAME = "modified_mlp"
     ASYMMETRIC = True
     FOURIER_EMB = True

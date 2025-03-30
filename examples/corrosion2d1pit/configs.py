@@ -11,7 +11,7 @@ class Config:
     DECAY = 0.9
     DECAY_EVERY = 200
     STAGGER_PERIOD = 25
-    EMB_SCALE = (1.0, 0.3) # emb sacle for (x, t)
+    EMB_SCALE = (2.0, 0.5) # emb sacle for (x, t)
     EMB_DIM = 64
 
     DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 2.0]]
@@ -25,7 +25,7 @@ class Config:
     OUT_DIM = 2
 
 
-    ACT_NAME = "tanh"
+    ACT_NAME = "gelu"
     ARCH_NAME = "modified_mlp"
     ASYMMETRIC = True
     FOURIER_EMB = True
