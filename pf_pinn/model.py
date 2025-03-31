@@ -172,30 +172,36 @@ class PINN(nn.Module):
         )[idx]
         return nabla_phi_part, nabla_c_part
 
-    def loss_ac(self, params, batch, eps):
-        x, t = batch
-        ac = vmap(self.net_ac, in_axes=(None, 0, 0))(params, x, t)
-        if not self.cfg.CAUSAL_WEIGHT:
-            return jnp.mean(ac**2), {}
-        else:
-            return self.causal_weightor.compute_causal_loss(ac, t, eps)
+    # def loss_ac(self, params, batch, eps):
+    #     x, t = batch
+    #     ac = vmap(self.net_ac, in_axes=(None, 0, 0))(params, x, t)
+    #     if not self.cfg.CAUSAL_WEIGHT:
+    #         return jnp.mean(ac**2), {}
+    #     else:
+    #         return self.causal_weightor.compute_causal_loss(ac, t, eps)
 
-    def loss_ch(self, params, batch, eps):
-        x, t = batch
-        ch = vmap(self.net_ch, in_axes=(None, 0, 0))(params, x, t)
-        if not self.cfg.CAUSAL_WEIGHT:
-            return jnp.mean(ch**2), {}
-        else:
-            return self.causal_weightor.compute_causal_loss(ch, t, eps)
+    # def loss_ch(self, params, batch, eps):
+    #     x, t = batch
+    #     ch = vmap(self.net_ch, in_axes=(None, 0, 0))(params, x, t)
+    #     if not self.cfg.CAUSAL_WEIGHT:
+    #         return jnp.mean(ch**2), {}
+    #     else:
+    #         return self.causal_weightor.compute_causal_loss(ch, t, eps)
+
 
     @partial(jit, static_argnums=(0, 4))
     def loss_pde(self, params, batch, eps, pde_name: str):
-        return jax.lax.cond(
+        x, t = batch
+        residual = jax.lax.cond(
             pde_name == "ac",
-            lambda _: self.loss_ac(params, batch, eps),
-            lambda _: self.loss_ch(params, batch, eps),
-            operand=None,
+            lambda operand: vmap(self.net_ac, in_axes=(None, 0, 0))(params, *operand),
+            lambda operand: vmap(self.net_ch, in_axes=(None, 0, 0))(params, *operand),
+            operand=(x, t),
         )
+        if not self.cfg.CAUSAL_WEIGHT:
+            return jnp.mean(residual**2), {}
+        else:
+            return self.causal_weightor.compute_causal_loss(residual, t, eps)
 
     def loss_ic(self, params, batch):
         x, t = batch
