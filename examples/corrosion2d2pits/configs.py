@@ -7,18 +7,18 @@ class Config:
     N_SAMPLES = 20
     ADAPTIVE_SAMPLES = 6000
     ADAPTIVE_BASE_RATE = 5
-    LR = 5e-4
-    DECAY = 0.8
-    DECAY_EVERY = 50
-    STAGGER_PERIOD = 10
-    EMB_SCALE = (2.0, 0.5) # emb sacle for (x, t)
+    LR = 2e-4
+    DECAY = 0.9
+    DECAY_EVERY = 100
+    STAGGER_PERIOD = 25
+    EMB_SCALE = (2.0, 0.3) # emb sacle for (x, t)
     EMB_DIM = 64
 
     DOMAIN = [[-0.5, 0.5], [0, 0.5], [0, 1]]
     DATA_PATH = "./data/2d-2pits/"
     LOG_DIR = "/root/tf-logs"
     PREFIX = "corrosion/2d-2pits/"
-    TS = [0.000, 2.360, 4.881, 9.984]
+    TS = [0.000, 1.474, 4.881, 9.984]
 
     NUM_LAYERS = 6
     HIDDEN_DIM = 200
@@ -43,7 +43,7 @@ class Config:
 
     Lc = 1e-4
     Tc = 10.0
-    AC_PRE_SCALE = 1e6
+    AC_PRE_SCALE = 1e7
     CH_PRE_SCALE = 1e0
 
 

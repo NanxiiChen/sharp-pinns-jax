@@ -11,10 +11,10 @@ class Config:
     DECAY = 0.9
     DECAY_EVERY = 200
     STAGGER_PERIOD = 25
-    EMB_SCALE = (1.5, 1.0) # emb sacle for (x, t)
+    EMB_SCALE = (2.0, 1.5) # emb sacle for (x, t)
     EMB_DIM = 64
 
-    DOMAIN = ((-0.6, 0.6), (-0.3, 0.3), (0, 0.3), (0, 1.0))
+    DOMAIN = ((-0.7, 0.7), (-0.35, 0.35), (0, 0.35), (0, 1.0))
     DATA_PATH = "./data/3d-2pits/"
     LOG_DIR = "/root/tf-logs"
     PREFIX = "corrosion/3d-2pits/"

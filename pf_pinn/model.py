@@ -107,7 +107,6 @@ class PINN(nn.Module):
         hess_phi_x = jax.hessian(lambda x, t: self.net_u(params, x, t)[0], argnums=0)
         lap_phi = jnp.trace(hess_phi_x(x, t))
         # lap_phi = self.laplacian(lambda x, t: self.net_u(params, x, t)[0], x, t)
-        
 
         ac = (
             dphi_dt
@@ -158,7 +157,12 @@ class PINN(nn.Module):
         dphi_dt, dc_dt = jac_dt(params, x, t)
         return dphi_dt, dc_dt
 
-    def net_nabla(self, params, x, t,):
+    def net_nabla(
+        self,
+        params,
+        x,
+        t,
+    ):
         idx = self.flux_idx
         nabla_phi_part = jax.jacrev(
             lambda x, t: self.net_u(params, x, t)[0], argnums=0
@@ -213,8 +217,8 @@ class PINN(nn.Module):
 
     def loss_flux(self, params, batch):
         x, t = batch
-        dphi_dy, dc_dy = vmap(self.net_nabla, in_axes=(None, 0, 0))(params, x, t)
-        return jnp.mean(dphi_dy**2) + jnp.mean(dc_dy**2)
+        dphi_dx, dc_dx = vmap(self.net_nabla, in_axes=(None, 0, 0))(params, x, t)
+        return jnp.mean(dphi_dx**2) + jnp.mean(dc_dx**2)
 
     @partial(jit, static_argnums=(0, 4))
     def compute_losses_and_grads(self, params, batch, eps, pde_name):

@@ -241,8 +241,8 @@ sampler = Sampler(
 )
 stagger = StaggerSwitch(
     pde_names=[
-        "ac",
         "ch",
+        "ac"
     ],
     stagger_period=cfg.STAGGER_PERIOD,
 )
