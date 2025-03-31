@@ -175,7 +175,7 @@ class Sampler:
             self.sample_pde_rar(pde_name),
             self.sample_ic(),
             self.sample_bc(),
-            # self.sample_flux(),
+            self.sample_flux(),
             self.sample_pde(),
         )
 
@@ -187,7 +187,7 @@ class PFPINN(PINN):
             self.loss_pde,
             self.loss_ic,
             self.loss_bc,
-            # self.loss_flux,
+            self.loss_flux,
             self.loss_irr,
         ]
         self.flux_idx = 1
@@ -310,12 +310,12 @@ for epoch in range(cfg.EPOCHS):
                 f"loss/{pde_name}",
                 "loss/ic",
                 "loss/bc",
-                # "loss/flux",
+                "loss/flux",
                 "loss/irr",
                 f"weight/{pde_name}",
                 "weight/ic",
                 "weight/bc",
-                # "weight/flux",
+                "weight/flux",
                 "weight/irr",
                 "error/error",
             ],
