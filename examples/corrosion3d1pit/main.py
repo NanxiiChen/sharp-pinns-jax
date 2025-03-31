@@ -255,7 +255,7 @@ class PFPINN(PINN):
             / 2
         )
         h_phi = -2 * phi**3 + 3 * phi**2
-        c = h_phi * cfg.CSE + (1 - h_phi) * 0.0
+        c = h_phi * cfg.CSE + (1 - h_phi) * cfg.CLE
         sol = jnp.stack([phi, c], axis=-1)
         return jax.lax.stop_gradient(sol)
 

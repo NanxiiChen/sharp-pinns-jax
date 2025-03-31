@@ -18,10 +18,10 @@ class Config:
     DATA_PATH = "./data/2d-2pits/"
     LOG_DIR = "/root/tf-logs"
     PREFIX = "corrosion/2d-2pits/"
-    TS = [0.000, 1.474, 4.881, 9.984]
+    TS = [0.000, 2.360, 4.881, 9.984]
 
     NUM_LAYERS = 6
-    HIDDEN_DIM = 200
+    HIDDEN_DIM = 128
     OUT_DIM = 2
 
 
@@ -43,7 +43,7 @@ class Config:
 
     Lc = 1e-4
     Tc = 10.0
-    AC_PRE_SCALE = 1e7
+    AC_PRE_SCALE = 1e6
     CH_PRE_SCALE = 1e0
 
 

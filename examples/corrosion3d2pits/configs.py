@@ -7,7 +7,7 @@ class Config:
     N_SAMPLES = 15
     ADAPTIVE_SAMPLES = 5000
     ADAPTIVE_BASE_RATE = 5
-    LR = 5e-4
+    LR = 2e-4
     DECAY = 0.9
     DECAY_EVERY = 200
     STAGGER_PERIOD = 25

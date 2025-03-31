@@ -38,12 +38,16 @@ class Sampler:
         self.n_samples = n_samples
         self.domain = domain
         self.key = key if key is not None else random.PRNGKey(0)
-        self.adaptive_kw = adaptive_kw if adaptive_kw is not None else {
-            "ratio": 10,
-            "num": 5000,
-            "model": None,
-            "state": None,
-        }
+        self.adaptive_kw = (
+            adaptive_kw
+            if adaptive_kw is not None
+            else {
+                "ratio": 10,
+                "num": 5000,
+                "model": None,
+                "state": None,
+            }
+        )
         self.mins = [d[0] for d in domain]
         self.maxs = [d[1] for d in domain]
 
@@ -171,7 +175,7 @@ class Sampler:
             self.sample_pde_rar(pde_name),
             self.sample_ic(),
             self.sample_bc(),
-            self.sample_flux(),
+            # self.sample_flux(),
             self.sample_pde(),
         )
 
@@ -179,6 +183,13 @@ class Sampler:
 class PFPINN(PINN):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.loss_fn_panel = [
+            self.loss_pde,
+            self.loss_ic,
+            self.loss_bc,
+            # self.loss_flux,
+            self.loss_irr,
+        ]
         self.flux_idx = 1
 
     @partial(jit, static_argnums=(0,))
@@ -207,7 +218,7 @@ class PFPINN(PINN):
             / 2
         )
         h_phi = -2 * phi**3 + 3 * phi**2
-        c = h_phi * cfg.CSE + (1 - h_phi) * 0.0
+        c = h_phi * cfg.CSE + (1 - h_phi) * cfg.CLE
         sol = jnp.stack([phi, c], axis=-1)
         return jax.lax.stop_gradient(sol)
 
@@ -240,10 +251,7 @@ sampler = Sampler(
     },
 )
 stagger = StaggerSwitch(
-    pde_names=[
-        "ch",
-        "ac"
-    ],
+    pde_names=["ac", "ch"],
     stagger_period=cfg.STAGGER_PERIOD,
 )
 
@@ -263,7 +271,7 @@ for epoch in range(cfg.EPOCHS):
         batch,
         cfg.CAUSAL_CONFIGS[pde_name + "_eps"],
     )
-    
+
     if cfg.CAUSAL_WEIGHT:
         # update_causal_eps(aux_vars["causal_weights"], cfg.CAUSAL_CONFIGS, pde_name)
         cfg.CAUSAL_CONFIGS.update(
@@ -302,12 +310,12 @@ for epoch in range(cfg.EPOCHS):
                 f"loss/{pde_name}",
                 "loss/ic",
                 "loss/bc",
-                "loss/flux",
+                # "loss/flux",
                 "loss/irr",
                 f"weight/{pde_name}",
                 "weight/ic",
                 "weight/bc",
-                "weight/flux",
+                # "weight/flux",
                 "weight/irr",
                 "error/error",
             ],
