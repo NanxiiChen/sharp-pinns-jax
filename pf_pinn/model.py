@@ -274,5 +274,5 @@ class PINN(nn.Module):
         weights = jnp.mean(grad_norms) / (grad_norms + eps)
         weights = jnp.nan_to_num(weights)
         weights = jnp.clip(weights, eps, 1 / eps)
-        # weights = weights.at[1].set(weights[1] * 5)
+        weights = weights.at[1].set(weights[1] * 3)
         return jax.lax.stop_gradient(weights)
