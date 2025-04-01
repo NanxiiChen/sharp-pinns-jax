@@ -29,7 +29,7 @@ class Config:
     ARCH_NAME = "modified_mlp"
     ASYMMETRIC = True
     FOURIER_EMB = True
-    CAUSAL_WEIGHT = True
+    CAUSAL_WEIGHT = False
 
     ALPHA_PHI = 1.03e-4
     OMEGA_PHI = 1.76e7
@@ -44,7 +44,7 @@ class Config:
     Lc = 1e-4
     Tc = 10.0
     AC_PRE_SCALE = 1e6
-    CH_PRE_SCALE = 1e0
+    CH_PRE_SCALE = 1e1
 
 
     CAUSAL_CONFIGS = {
