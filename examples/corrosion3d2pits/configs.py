@@ -3,7 +3,7 @@ Sharp-PINNs for pitting corrosion with 2d-1pit
 """
 
 class Config:
-    EPOCHS = 100000
+    EPOCHS = 2000
     N_SAMPLES = 15
     ADAPTIVE_SAMPLES = 5000
     ADAPTIVE_BASE_RATE = 5
