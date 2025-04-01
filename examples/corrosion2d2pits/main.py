@@ -172,7 +172,7 @@ class Sampler:
 
     def sample(self, pde_name="ac"):
         return (
-            self.sample_pde_rar(pde_name),
+            self.sample_pde(),
             self.sample_ic(),
             self.sample_bc(),
             self.sample_flux(),
