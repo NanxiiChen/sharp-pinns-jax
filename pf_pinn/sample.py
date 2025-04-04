@@ -66,8 +66,6 @@ class Sampler:
             else {
                 "ratio": 10,
                 "num": 5000,
-                "model": None,
-                "state": None,
             }
         )
         self.mins = [d[0] for d in domain]
@@ -83,7 +81,7 @@ class Sampler:
         )
         return data[:, :-1], data[:, -1:]
 
-    def sample_pde_rar(self):
+    def sample_pde_rar(self, fns, params):
         key, self.key = random.split(self.key)
         grid_key, lhs_key = random.split(key)
         common_points = jnp.concatenate(self.sample_pde(), axis=-1)
@@ -94,29 +92,23 @@ class Sampler:
             self.adaptive_kw["num"] * self.adaptive_kw["ratio"],
             key=lhs_key,
         )
-
-        model = self.adaptive_kw["model"]
-        params = self.adaptive_kw["params"]
         x, t = adaptive_base[:, :-1], adaptive_base[:, -1:]
-
-        net_ac = vmap(model.net_ac, in_axes=(None, 0, 0))
-        net_ch = vmap(model.net_ch, in_axes=(None, 0, 0))
-        res_ac = jax.lax.stop_gradient(net_ac(params, x, t))
-        res_ch = jax.lax.stop_gradient(net_ch(params, x, t))
-
-        threshold_ac = jnp.percentile(
-            jnp.abs(res_ac), 100 - (self.adaptive_kw["num"] / res_ac.size) * 100
+        rar_points = jnp.zeros(
+            (self.adaptive_kw["num"] * len(fns), adaptive_base.shape[1])
         )
 
-        threshold_ch = jnp.percentile(
-            jnp.abs(res_ch), 100 - (self.adaptive_kw["num"] / res_ch.size) * 100
-        )
+        for idx, fn in enumerate(fns):
+            res = jax.lax.stop_gradient(vmap(fn, in_axes=(None, 0, 0))(params, x, t))
+            _, indices = jax.lax.top_k(jnp.abs(res), self.adaptive_kw["num"])
+            selected_points = adaptive_base[indices]
+            rar_points = rar_points.at[
+                idx * self.adaptive_kw["num"] : (idx + 1) * self.adaptive_kw["num"], :
+            ].set(selected_points)
 
         data = jnp.concatenate(
             [
                 common_points,
-                adaptive_base[jnp.abs(res_ac) >= threshold_ac],
-                adaptive_base[jnp.abs(res_ch) >= threshold_ch],
+                rar_points,
             ],
             axis=0,
         )
@@ -131,9 +123,9 @@ class Sampler:
     def sample_flux(self):
         raise NotImplementedError("Flux sampling is not implemented.")
 
-    def sample(self):
+    def sample(self, *args, **kwargs):
         return (
-            self.sample_pde_rar(),
+            self.sample_pde_rar(*args, **kwargs),
             self.sample_ic(),
             self.sample_bc(),
             self.sample_flux(),

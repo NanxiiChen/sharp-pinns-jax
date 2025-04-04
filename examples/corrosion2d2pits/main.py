@@ -44,13 +44,10 @@ class PFSampler(Sampler):
             else {
                 "ratio": 10,
                 "num": 5000,
-                "model": None,
-                "state": None,
             }
         )
         self.mins = [d[0] for d in domain]
         self.maxs = [d[1] for d in domain]
-
 
     def sample_ic(self):
         key, self.key = random.split(self.key)
@@ -127,15 +124,6 @@ class PFSampler(Sampler):
         )
         return data[:, :-1], data[:, -1:]
 
-    def sample(self):
-        return (
-            self.sample_pde_rar(),
-            self.sample_ic(),
-            self.sample_bc(),
-            self.sample_flux(),
-            self.sample_pde(),
-        )
-
 
 class PFPINN(PINN):
     def __init__(self, *args, **kwargs):
@@ -200,8 +188,6 @@ sampler = PFSampler(
     key=sampler_key,
     adaptive_kw={
         "ratio": cfg.ADAPTIVE_BASE_RATE,
-        "model": pinn,
-        "params": state.params,
         "num": cfg.ADAPTIVE_SAMPLES,
     },
 )
@@ -216,8 +202,8 @@ for epoch in range(cfg.EPOCHS):
     loss_fn = pinn.loss_fn_ac if pde_name == "ac" else pinn.loss_fn_ch
 
     if epoch % cfg.STAGGER_PERIOD == 0:
-        sampler.adaptive_kw["params"].update(state.params)
-        batch = sampler.sample()
+        # sampler.adaptive_kw["params"].update(state.params)
+        batch = sampler.sample(fns=[pinn.net_ac, pinn.net_ch], params=state.params)
 
     state, (weighted_loss, loss_components, weight_components, aux_vars) = train_step(
         loss_fn,

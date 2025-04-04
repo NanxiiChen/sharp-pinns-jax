@@ -37,8 +37,6 @@ class PFSampler(Sampler):
         adaptive_kw={
             "ratio": 10,
             "num": 5000,
-            "model": None,
-            "state": None,
         },
     ):
         self.n_samples = n_samples
@@ -195,14 +193,6 @@ class PFSampler(Sampler):
         )
         return data[:, :-1], data[:, -1:]
 
-    def sample(self, pde_name="ac"):
-        return (
-            self.sample_pde_rar(),
-            self.sample_ic(),
-            self.sample_bc(),
-            #self.sample_flux(),
-            self.sample_pde(),
-        )
 
 
 class PFPINN(PINN):
@@ -212,7 +202,7 @@ class PFPINN(PINN):
             self.loss_pde,
             self.loss_ic,
             self.loss_bc,
-            #self.loss_flux,
+            self.loss_flux,
             self.loss_irr,
         ]
         self.flux_idx = 2
@@ -271,8 +261,6 @@ sampler = PFSampler(
     key=sampler_key,
     adaptive_kw={
         "ratio": cfg.ADAPTIVE_BASE_RATE,
-        "model": pinn,
-        "params": state.params,
         "num": cfg.ADAPTIVE_SAMPLES,
     },
 )
@@ -284,9 +272,10 @@ for epoch in range(cfg.EPOCHS):
     loss_fn = pinn.loss_fn_ac if pde_name == "ac" else pinn.loss_fn_ch
     
     if epoch % cfg.STAGGER_PERIOD == 0:
-        sampler.adaptive_kw["params"].update(state.params)
-        batch = sampler.sample(pde_name=pde_name)
-        # print(f"Epoch: {epoch}, PDE: {pde_name}")
+        batch = sampler.sample(
+            fns=[pinn.net_ac, pinn.net_ch],
+            params=state.params,
+        )
 
     state, (weighted_loss, loss_components, weight_components, aux_vars) = train_step(
         loss_fn,
@@ -335,12 +324,12 @@ for epoch in range(cfg.EPOCHS):
                 f"loss/{pde_name}",
                 "loss/ic",
                 "loss/bc",
-                #"loss/flux",
+                "loss/flux",
                 "loss/irr",
                 f"weight/{pde_name}",
                 "weight/ic",
                 "weight/bc",
-                #"weight/flux",
+                "weight/flux",
                 "weight/irr",
                 "error/error",
             ],

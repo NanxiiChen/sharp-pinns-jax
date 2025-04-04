@@ -124,7 +124,7 @@ class PINN(nn.Module):
         CH1 = 2 * self.cfg.AA * self.cfg.MM * self.cfg.Tc / self.cfg.Lc**2
 
         # self.net_u : (x, t) --> (phi, c)
-        phi, c = self.net_u(params, x, t)
+        phi, _ = self.net_u(params, x, t)
 
         jac_phi_x = jax.jacrev(lambda x, t: self.net_u(params, x, t)[0], argnums=0)
         nabla_phi = jac_phi_x(x, t)
