@@ -5,7 +5,7 @@ from matplotlib import font_manager, rcParams
 from .arch import MLP, ModifiedMLP
 from .evaluator import evaluate1D, evaluate2D, evaluate3D
 from .metrics import MetricsTracker
-from .sample import mesh_flat, lhs_sampling, shifted_grid
+from .sample import mesh_flat, lhs_sampling, shifted_grid, Sampler
 from .causal import CausalWeightor, update_causal_eps
 from .model import PINN
 from .train import create_train_state, train_step, StaggerSwitch

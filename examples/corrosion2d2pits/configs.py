@@ -4,12 +4,12 @@ Sharp-PINNs for pitting corrosion with 2d-2pits
 
 class Config:
     EPOCHS = 1000
-    N_SAMPLES = 20
-    ADAPTIVE_SAMPLES = 6000
+    N_SAMPLES = 18
+    ADAPTIVE_SAMPLES = 3000
     ADAPTIVE_BASE_RATE = 5
     LR = 5e-4
-    DECAY = 0.6
-    DECAY_EVERY = 200
+    DECAY = 0.9
+    DECAY_EVERY = 100
     STAGGER_PERIOD = 25
     EMB_SCALE = (2.0, 0.2) # emb sacle for (x, t)
     EMB_DIM = 64
@@ -29,7 +29,7 @@ class Config:
     ARCH_NAME = "modified_mlp"
     ASYMMETRIC = True
     FOURIER_EMB = True
-    CAUSAL_WEIGHT = False
+    CAUSAL_WEIGHT = True
 
     ALPHA_PHI = 1.03e-4
     OMEGA_PHI = 1.76e7
@@ -44,7 +44,7 @@ class Config:
     Lc = 1e-4
     Tc = 10.0
     AC_PRE_SCALE = 1e6
-    CH_PRE_SCALE = 1e1
+    CH_PRE_SCALE = 1e0
 
 
     CAUSAL_CONFIGS = {

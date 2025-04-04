@@ -26,7 +26,7 @@ from examples.corrosion2d2pits.configs import Config as cfg
 # config.update("jax_disable_jit", True)
 
 
-class Sampler:
+class PFSampler(Sampler):
 
     def __init__(
         self,
@@ -51,49 +51,6 @@ class Sampler:
         self.mins = [d[0] for d in domain]
         self.maxs = [d[1] for d in domain]
 
-    def adaptive_sampling(self, residual_fn):
-        key, self.key = random.split(self.key)
-        adaptive_base = lhs_sampling(
-            self.mins,
-            self.maxs,
-            self.adaptive_kw["num"] * self.adaptive_kw["ratio"],
-            key=key,
-        )
-        residuals = residual_fn(adaptive_base)
-        max_residuals, indices = jax.lax.top_k(
-            jnp.abs(residuals), self.adaptive_kw["num"]
-        )
-        return adaptive_base[indices]
-
-    def sample_pde(self):
-        key, self.key = random.split(self.key)
-        data = shifted_grid(
-            self.mins,
-            self.maxs,
-            [self.n_samples, self.n_samples, self.n_samples * 2],
-            key,
-        )
-        return data[:, :-1], data[:, -1:]
-
-    def sample_pde_rar(self, pde_name="ac"):
-        key, self.key = random.split(self.key)
-        batch = shifted_grid(
-            self.mins,
-            self.maxs,
-            [self.n_samples, self.n_samples, self.n_samples * 2],
-            key,
-        )
-
-        def residual_fn(batch):
-            model = self.adaptive_kw["model"]
-            params = self.adaptive_kw["params"]
-            x, t = batch[:, :-1], batch[:, -1:]
-            fn = model.net_ac if pde_name == "ac" else model.net_ch
-            return vmap(fn, in_axes=(None, 0, 0))(params, x, t)
-
-        adaptive_sampling = self.adaptive_sampling(residual_fn)
-        data = jnp.concatenate([batch, adaptive_sampling], axis=0)
-        return data[:, :-1], data[:, -1:]
 
     def sample_ic(self):
         key, self.key = random.split(self.key)
@@ -170,9 +127,9 @@ class Sampler:
         )
         return data[:, :-1], data[:, -1:]
 
-    def sample(self, pde_name="ac"):
+    def sample(self):
         return (
-            self.sample_pde(),
+            self.sample_pde_rar(),
             self.sample_ic(),
             self.sample_bc(),
             self.sample_flux(),
@@ -192,7 +149,6 @@ class PFPINN(PINN):
         ]
         self.flux_idx = 1
 
-    @partial(jit, static_argnums=(0,))
     def ref_sol_bc(self, x, t):
         # x: (x1, x2)
         r = jnp.sqrt((jnp.abs(x[0]) - 0.15) ** 2 + x[1] ** 2)
@@ -201,7 +157,6 @@ class PFPINN(PINN):
         sol = jnp.stack([phi, c], axis=-1)
         return jax.lax.stop_gradient(sol)
 
-    @partial(jit, static_argnums=(0,))
     def ref_sol_ic(self, x, t):
         r = jnp.sqrt((jnp.abs(x[0]) - 0.15) ** 2 + x[1] ** 2)
         phi = (
@@ -239,7 +194,7 @@ now = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 log_path = f"{cfg.LOG_DIR}/{cfg.PREFIX}/{now}"
 metrics_tracker = MetricsTracker(log_path)
 ckpt = ocp.StandardCheckpointer()
-sampler = Sampler(
+sampler = PFSampler(
     cfg.N_SAMPLES,
     domain=cfg.DOMAIN,
     key=sampler_key,
@@ -261,9 +216,8 @@ for epoch in range(cfg.EPOCHS):
     loss_fn = pinn.loss_fn_ac if pde_name == "ac" else pinn.loss_fn_ch
 
     if epoch % cfg.STAGGER_PERIOD == 0:
-        # sampler.adaptive_kw["params"].update(state.params)
-        batch = sampler.sample(pde_name=pde_name)
-        print(f"Epoch: {epoch}, PDE: {pde_name}")
+        sampler.adaptive_kw["params"].update(state.params)
+        batch = sampler.sample()
 
     state, (weighted_loss, loss_components, weight_components, aux_vars) = train_step(
         loss_fn,
@@ -296,7 +250,6 @@ for epoch in range(cfg.EPOCHS):
             Lc=cfg.Lc,
             Tc=cfg.Tc,
         )
-
         print(
             f"Epoch: {epoch}, "
             f"Error: {error:.2e}, "
